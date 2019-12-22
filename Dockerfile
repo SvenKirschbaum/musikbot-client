@@ -32,6 +32,10 @@ RUN apt-get update && apt-get install -y\
     libxslt1.1 \
     libegl1 \
     libxkbcommon0
+
+RUN rm -f /usr/lib/x86_64-linux-gnu/vlc/lua/playlist/youtube.luac
+RUN wget -q https://raw.githubusercontent.com/videolan/vlc/master/share/lua/playlist/youtube.lua -O /usr/lib/x86_64-linux-gnu/vlc/lua/playlist/youtube.lua
+
 WORKDIR /usr/local/teamspeak
 RUN wget -q https://files.teamspeak-services.com/releases/client/3.3.2/TeamSpeak3-Client-linux_amd64-3.3.2.run -O ./install.run && \
     chmod +x ./install.run && \

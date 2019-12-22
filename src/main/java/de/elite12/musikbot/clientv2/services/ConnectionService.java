@@ -109,7 +109,11 @@ public class ConnectionService extends StompSessionHandlerAdapter implements App
             }
         }
         if(payload instanceof SimpleResponse) {
-            //TODO:
+            SimpleResponse simpleResponse = (SimpleResponse) payload;
+            switch (simpleResponse.getResponse()) {
+                case NO_SONG_AVAILABLE:
+                    break;
+            }
         }
         if(payload instanceof Song) {
             Song song = (Song) payload;
