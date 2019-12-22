@@ -25,4 +25,19 @@ public class Clientv2ServiceProperties {
 	 * Server URL to connect to
 	 */
 	private String serverurl;
+
+	/**
+	 * Spotify Client Id
+	 */
+	private String spotifyapiid;
+
+	/**
+	 * Spotify Client Secret
+	 */
+	private String spotifyapisecret;
+
+	/**
+	 * Spotify Refresh Token
+	 */
+	private String spotifyrefreshtoken;
 }

@@ -1,6 +1,6 @@
 package de.elite12.musikbot.clientv2.services;
 
-import de.elite12.musikbot.clientv2.player.AbstractPlayer;
+import de.elite12.musikbot.clientv2.player.Player;
 import de.elite12.musikbot.shared.clientDTO.Song;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,15 +16,15 @@ public class PlayerService {
     @Autowired
     private ListableBeanFactory listableBeanFactory;
 
-    private AbstractPlayer[] players;
+    private Player[] players;
 
-    private AbstractPlayer activeplayer;
+    private Player activeplayer;
 
     private Logger logger = LoggerFactory.getLogger(PlayerService.class);
 
     @PostConstruct
     private void postConstruct() {
-        this.players = this.listableBeanFactory.getBeansOfType(AbstractPlayer.class).values().toArray(AbstractPlayer[]::new);
+        this.players = this.listableBeanFactory.getBeansOfType(Player.class).values().toArray(Player[]::new);
         this.activeplayer = this.players[0];
     }
 
@@ -41,8 +41,8 @@ public class PlayerService {
         this.activeplayer.play(song);
     }
 
-    private AbstractPlayer activatePlayer(String type) {
-        for(AbstractPlayer player:this.players) {
+    private Player activatePlayer(String type) {
+        for(Player player:this.players) {
             if(player.getSupportedTypes().contains(type)) {
                 this.activeplayer.stop();
                 return this.activeplayer = player;
