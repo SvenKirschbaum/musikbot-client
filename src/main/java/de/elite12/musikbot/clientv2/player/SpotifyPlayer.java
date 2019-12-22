@@ -189,6 +189,7 @@ public class SpotifyPlayer implements Player {
     }
 
     private void finished() {
+        logger.info("Playback finished");
         this.applicationEventPublisher.publishEvent(new SongFinished(this));
     }
 }
