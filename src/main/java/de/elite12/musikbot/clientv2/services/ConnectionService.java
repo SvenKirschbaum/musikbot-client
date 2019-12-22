@@ -11,6 +11,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationListener;
 import org.springframework.messaging.converter.MappingJackson2MessageConverter;
 import org.springframework.messaging.simp.stomp.*;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
@@ -36,6 +37,9 @@ public class ConnectionService extends StompSessionHandlerAdapter implements App
     @Autowired
     private ApplicationContext appContext;
 
+    @Autowired
+    private TaskScheduler messageBrokerTaskScheduler;
+
     private WebSocketStompClient webSocketStompClient;
     private StompSession session;
 
@@ -46,6 +50,8 @@ public class ConnectionService extends StompSessionHandlerAdapter implements App
 
     @PostConstruct
     public void postConstruct() {
+        webSocketStompClient.setTaskScheduler(messageBrokerTaskScheduler);
+        webSocketStompClient.setDefaultHeartbeat(new long[]{30000,30000});
         this.webSocketStompClient.connect(clientv2ServiceProperties.getServerurl(),this);
     }
 
