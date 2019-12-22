@@ -1,6 +1,7 @@
 application.properties
 libmusikbot-0.0.1-SNAPSHOT.jar
 container.env
+container.env.*
 HELP.md
 target/
 !.mvn/wrapper/maven-wrapper.jar

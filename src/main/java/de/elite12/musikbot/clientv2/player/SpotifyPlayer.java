@@ -5,6 +5,7 @@ import com.neovisionaries.i18n.CountryCode;
 import com.wrapper.spotify.SpotifyApi;
 import com.wrapper.spotify.exceptions.SpotifyWebApiException;
 import com.wrapper.spotify.model_objects.credentials.AuthorizationCodeCredentials;
+import com.wrapper.spotify.model_objects.miscellaneous.CurrentlyPlayingContext;
 import com.wrapper.spotify.model_objects.miscellaneous.Device;
 import com.wrapper.spotify.model_objects.specification.Track;
 import com.wrapper.spotify.requests.authorization.authorization_code.AuthorizationCodeRefreshRequest;
@@ -40,6 +41,8 @@ public class SpotifyPlayer implements Player {
     @Autowired
     private ApplicationEventPublisher applicationEventPublisher;
 
+    private String deviceId = "";
+
     private boolean paused = false;
 
     private Timer timer = null;
@@ -47,36 +50,48 @@ public class SpotifyPlayer implements Player {
     private Duration remaining = null;
 
     @PostConstruct
-    private void postConstruct() throws IOException, SpotifyWebApiException {
+    private void postConstruct() {
         this.spotifyApi = new SpotifyApi.Builder()
                 .setClientId(properties.getSpotifyapiid())
                 .setClientSecret(properties.getSpotifyapisecret())
                 .setRefreshToken(properties.getSpotifyrefreshtoken())
                 .build();
 
-        this.refreshToken();
+        try {
+            this.refreshToken();
 
-        //Transfer
-        Device[] devices = this.spotifyApi.getUsersAvailableDevices().build().execute();
-        Device device = null;
-        boolean found = false;
-        for(Device d:devices) {
-            if(d.getName().equalsIgnoreCase("Musikbot")) {
-                found = true;
-                device = d;
+            CurrentlyPlayingContext currentlyPlayingContext = this.spotifyApi.getInformationAboutUsersCurrentPlayback().build().execute();
+
+            if(currentlyPlayingContext != null) {
+                if(currentlyPlayingContext.getIs_playing()) this.stop();
             }
+
+            //Transfer
+            Device[] devices = this.spotifyApi.getUsersAvailableDevices().build().execute();
+            boolean found = false;
+            for (Device d : devices) {
+                if (d.getName().equalsIgnoreCase("Musikbot")) {
+                    found = true;
+                    this.deviceId = d.getId();
+                }
+            }
+
+            if (!found) {
+                throw new SpotifyWebApiException("Musikbot spotifyd has not been found");
+            }
+
+            if(currentlyPlayingContext != null) {
+                if(!currentlyPlayingContext.getDevice().getId().equals(this.deviceId)) {
+                    JsonArray jsonArray = new JsonArray(1);
+                    jsonArray.add(this.deviceId);
+                    this.spotifyApi.transferUsersPlayback(jsonArray).build().execute();
+                }
+            }
+
+        } catch(Exception e) {
+            logger.error("Error initializing Spotifyplayer", e);
+            System.exit(1);
         }
-
-        if(!found) {
-            throw new SpotifyWebApiException("Musikbot spotifyd has not been found");
-        }
-
-        JsonArray jsonArray = new JsonArray(1);
-        jsonArray.add(device.getId());
-
-        this.spotifyApi.transferUsersPlayback(jsonArray).build().execute();
-
-        this.stop();
     }
 
     private void refreshToken() throws IOException, SpotifyWebApiException {
@@ -111,7 +126,7 @@ public class SpotifyPlayer implements Player {
             Track track = this.spotifyApi.getTrack(sid).market(CountryCode.DE).build().execute();
             JsonArray jsonArray = new JsonArray(1);
             jsonArray.add("spotify:track:"+sid);
-            this.spotifyApi.startResumeUsersPlayback().uris(jsonArray).build().execute();
+            this.spotifyApi.startResumeUsersPlayback().device_id(this.deviceId).uris(jsonArray).build().execute();
 
             this.cancelTimer();
             this.endtime = Instant.now().plusMillis(track.getDurationMs());
@@ -127,8 +142,10 @@ public class SpotifyPlayer implements Player {
         this.logger.info("Stop");
         this.paused = false;
         try {
-            this.cancelTimer();
-            this.spotifyApi.pauseUsersPlayback().build().execute();
+            if(this.timer != null) {
+                this.cancelTimer();
+                this.spotifyApi.pauseUsersPlayback().build().execute();
+            }
         } catch (IOException | SpotifyWebApiException e) {
             logger.error("Error stopping spotify playback" ,e);
         }
@@ -144,7 +161,7 @@ public class SpotifyPlayer implements Player {
                 this.remaining = Duration.between(Instant.now(),this.endtime);
             }
             else {
-                this.spotifyApi.startResumeUsersPlayback().build().execute();
+                this.spotifyApi.startResumeUsersPlayback().device_id(this.deviceId).build().execute();
                 this.endtime=Instant.now().plus(this.remaining);
                 this.startTimer();
             }
