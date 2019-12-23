@@ -1,11 +1,14 @@
 package de.elite12.musikbot.clientv2.services;
 
+import de.elite12.musikbot.clientv2.events.StartSong;
+import de.elite12.musikbot.clientv2.events.StopSong;
 import de.elite12.musikbot.clientv2.player.Player;
 import de.elite12.musikbot.shared.clientDTO.Song;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
@@ -15,6 +18,9 @@ import java.util.NoSuchElementException;
 public class PlayerService {
     @Autowired
     private ListableBeanFactory listableBeanFactory;
+
+    @Autowired
+    private ApplicationEventPublisher applicationEventPublisher;
 
     private Player[] players;
 
@@ -30,6 +36,7 @@ public class PlayerService {
 
     public void stop() {
         this.activeplayer.stop();
+        this.applicationEventPublisher.publishEvent(new StopSong(this));
     }
 
     public void pause() {
@@ -39,6 +46,7 @@ public class PlayerService {
     public void play(Song song) {
         this.activatePlayer(song.getSongtype());
         this.activeplayer.play(song);
+        this.applicationEventPublisher.publishEvent(new StartSong(this,song));
     }
 
     private Player activatePlayer(String type) {

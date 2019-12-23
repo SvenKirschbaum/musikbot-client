@@ -40,4 +40,9 @@ public class Clientv2ServiceProperties {
 	 * Spotify Refresh Token
 	 */
 	private String spotifyrefreshtoken;
+
+	/**
+	 * API key used to connect via clientquery
+	 */
+	private String ts3apikey;
 }
