@@ -35,6 +35,9 @@ public class ConnectionService extends StompSessionHandlerAdapter implements App
     private PlayerService playerService;
 
     @Autowired
+    private VolumeService volumeService;
+
+    @Autowired
     private ApplicationContext appContext;
 
     @Autowired
@@ -107,6 +110,10 @@ public class ConnectionService extends StompSessionHandlerAdapter implements App
                     this.shutdown();
                     break;
             }
+        }
+        if(payload instanceof VolumeCommand) {
+            VolumeCommand command = (VolumeCommand) payload;
+            volumeService.setVolume(command.getVolume());
         }
         if(payload instanceof SimpleResponse) {
             SimpleResponse simpleResponse = (SimpleResponse) payload;
