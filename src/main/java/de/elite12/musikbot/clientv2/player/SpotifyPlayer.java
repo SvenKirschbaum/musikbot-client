@@ -129,7 +129,9 @@ public class SpotifyPlayer implements Player {
             this.spotifyApi.startResumeUsersPlayback().device_id(this.deviceId).uris(jsonArray).build().execute();
 
             this.cancelTimer();
+            logger.info(String.format("Song Duration: %dms", track.getDurationMs()));
             this.endtime = Instant.now().plusMillis(track.getDurationMs());
+            logger.info(String.format("End Time: %s", this.endtime.toString()));
             this.startTimer();
             this.paused = false;
         } catch (IOException | SpotifyWebApiException e) {
