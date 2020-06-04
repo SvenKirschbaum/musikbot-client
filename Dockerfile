@@ -1,50 +1,47 @@
 #BUILD
-FROM maven:3.6.3-jdk-11 AS build
+FROM maven:3.6.3-jdk-14 AS build
 WORKDIR /usr/src/app
 COPY pom.xml .
 COPY ./libmusikbot-0.0.1-SNAPSHOT.jar /usr/lib/libmusikbot/libmusikbot-0.0.1-SNAPSHOT.jar
 RUN mvn org.apache.maven.plugins:maven-install-plugin:install-file -Dfile=/usr/lib/libmusikbot/libmusikbot-0.0.1-SNAPSHOT.jar
-RUN mvn org.apache.maven.plugins:maven-dependency-plugin:3.0.2:go-offline
-COPY . .
-RUN mvn -f ./pom.xml clean package
+RUN mvn dependency:go-offline
+COPY src/ ./src/
+RUN mvn -f ./pom.xml package
 
 #PACKAGE
-FROM openjdk:13-buster
-RUN apt-get update && apt-get install -y\
-    wget \
-    xvfb \
-    pulseaudio \
-    supervisor \
-    vlc \
-    libglib2.0-0 \
-    libgl1 \
-    libnss3 \
-    libfreetype6 \
+FROM openjdk:14-buster
+RUN apt-get update \
+ && apt-get install -y \
+    libasound2 \
+    libdbus-1-3 \
+    libegl1 \
     libfontconfig1 \
+    libfreetype6 \
+    libgl1 \
+    libglib2.0-0 \
+    libnss3 \
+    libpci3 \
     libxcomposite1 \
     libxcursor1 \
     libxi6 \
-    libxtst6 \
-    libxss1 \
-    libpci3 \
-    libasound2 \
-    libdbus-1-3 \
+    libxkbcommon0 \
     libxslt1.1 \
-    libegl1 \
-    libxkbcommon0
-
-RUN rm -f /usr/lib/x86_64-linux-gnu/vlc/lua/playlist/youtube.luac
-RUN wget -q https://raw.githubusercontent.com/videolan/vlc/master/share/lua/playlist/youtube.lua -O /usr/lib/x86_64-linux-gnu/vlc/lua/playlist/youtube.lua
-
-WORKDIR /usr/local/teamspeak
-RUN wget -q https://files.teamspeak-services.com/releases/client/3.3.2/TeamSpeak3-Client-linux_amd64-3.3.2.run -O ./install.run && \
-    chmod +x ./install.run && \
-    echo -ne "\ny" | ./install.run
-
-WORKDIR /usr/local/spotifyd
-RUN wget -qO- https://github.com/Spotifyd/spotifyd/releases/latest/download/spotifyd-linux-slim.tar.gz | tar xvz
-
-WORKDIR /
+    libxss1 \
+    libxtst6 \
+    pulseaudio \
+    supervisor \
+    vlc \
+    wget \
+    xvfb \
+ && rm -rf /var/lib/apt/lists/* \
+ && rm -f /usr/lib/x86_64-linux-gnu/vlc/lua/playlist/youtube.luac \
+ && wget -q https://raw.githubusercontent.com/videolan/vlc/master/share/lua/playlist/youtube.lua -O /usr/lib/x86_64-linux-gnu/vlc/lua/playlist/youtube.lua \
+ && mkdir -p /usr/local/teamspeak \
+ && wget -q https://files.teamspeak-services.com/releases/client/3.5.3/TeamSpeak3-Client-linux_amd64-3.5.3.run -O /usr/local/teamspeak/install.run \
+ && chmod +x /usr/local/teamspeak/install.run \
+ && echo -ne "\ny" | (cd /usr/local/teamspeak/ && ./install.run) \
+ && mkdir -p /usr/local/spotifyd \
+ && wget -qO- https://github.com/Spotifyd/spotifyd/releases/latest/download/spotifyd-linux-slim.tar.gz | tar -C /usr/local/spotifyd/ -xvz
 
 COPY ./docker-fs /
 
