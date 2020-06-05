@@ -13,6 +13,7 @@ import de.elite12.musikbot.clientv2.core.Clientv2ServiceProperties;
 import de.elite12.musikbot.clientv2.events.SongFinished;
 import de.elite12.musikbot.shared.clientDTO.Song;
 import de.elite12.musikbot.shared.util.SongIDParser;
+import org.apache.hc.core5.http.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -94,7 +95,7 @@ public class SpotifyPlayer implements Player {
         }
     }
 
-    private void refreshToken() throws IOException, SpotifyWebApiException {
+    private void refreshToken() throws IOException, SpotifyWebApiException, ParseException {
         AuthorizationCodeRefreshRequest request = this.spotifyApi.authorizationCodeRefresh().build();
         AuthorizationCodeCredentials credentials = request.execute();
 
@@ -105,7 +106,7 @@ public class SpotifyPlayer implements Player {
             public void run() {
                 try {
                     refreshToken();
-                } catch (IOException | SpotifyWebApiException e) {
+                } catch (IOException | SpotifyWebApiException | ParseException e) {
                     logger.error("Error refreshing Token", e);
                     System.exit(1);
                 }
@@ -134,7 +135,7 @@ public class SpotifyPlayer implements Player {
             logger.info(String.format("End Time: %s", this.endtime.toString()));
             this.startTimer();
             this.paused = false;
-        } catch (IOException | SpotifyWebApiException e) {
+        } catch (IOException | SpotifyWebApiException | ParseException e) {
             logger.error("Error stopping spotify playback" ,e);
         }
     }
@@ -148,7 +149,7 @@ public class SpotifyPlayer implements Player {
                 this.cancelTimer();
                 this.spotifyApi.pauseUsersPlayback().build().execute();
             }
-        } catch (IOException | SpotifyWebApiException e) {
+        } catch (IOException | SpotifyWebApiException | ParseException e) {
             logger.error("Error stopping spotify playback" ,e);
         }
     }
@@ -168,7 +169,7 @@ public class SpotifyPlayer implements Player {
                 this.startTimer();
             }
             this.paused=!this.paused;
-        } catch (IOException | SpotifyWebApiException e) {
+        } catch (IOException | SpotifyWebApiException | ParseException e) {
             logger.error("Error stopping spotify playback" ,e);
         }
     }

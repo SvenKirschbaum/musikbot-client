@@ -60,12 +60,12 @@
         <dependency>
             <groupId>uk.co.caprica</groupId>
             <artifactId>vlcj</artifactId>
-            <version>4.2.0</version>
+            <version>4.5.2</version>
         </dependency>
         <dependency>
             <groupId>se.michaelthelin.spotify</groupId>
             <artifactId>spotify-web-api-java</artifactId>
-            <version>4.2.1</version>
+            <version>6.0.0</version>
         </dependency>
     </dependencies>
 
