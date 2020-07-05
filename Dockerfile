@@ -2,9 +2,8 @@
 FROM maven:3.6.3-jdk-14 AS build
 WORKDIR /usr/src/app
 COPY pom.xml .
-COPY ./libmusikbot-0.0.1-SNAPSHOT.jar /usr/lib/libmusikbot/libmusikbot-0.0.1-SNAPSHOT.jar
-RUN mvn org.apache.maven.plugins:maven-install-plugin:install-file -Dfile=/usr/lib/libmusikbot/libmusikbot-0.0.1-SNAPSHOT.jar
-RUN mvn dependency:go-offline
+COPY lib lib
+RUN for file in ./lib/*; do mvn org.apache.maven.plugins:maven-install-plugin:2.5.2:install-file -Dfile=$file; done; mvn dependency:go-offline
 COPY src/ ./src/
 RUN mvn -f ./pom.xml package
 
