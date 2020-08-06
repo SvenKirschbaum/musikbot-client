@@ -1,7 +1,10 @@
 package de.elite12.musikbot.clientv2.player;
 
+import com.github.kiulian.downloader.YoutubeDownloader;
+import com.github.kiulian.downloader.model.YoutubeVideo;
 import de.elite12.musikbot.clientv2.events.SongFinished;
 import de.elite12.musikbot.shared.clientDTO.Song;
+import de.elite12.musikbot.shared.util.SongIDParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,16 +34,19 @@ public class YoutubePlayer extends MediaPlayerEventAdapter implements Player, Me
             "--no-metadata-network-access"
     };
 
-    private Logger logger = LoggerFactory.getLogger(YoutubePlayer.class);
+    private final Logger logger = LoggerFactory.getLogger(YoutubePlayer.class);
 
-    private MediaPlayerFactory factory;
-    private MediaPlayer player;
+    private final MediaPlayerFactory factory;
+    private final MediaPlayer player;
+    private final YoutubeDownloader downloader;
 
     public YoutubePlayer() {
         this.factory = new MediaPlayerFactory(vlcj_options);
         this.player = this.factory.mediaPlayers().newEmbeddedMediaPlayer();
         this.player.events().addMediaPlayerEventListener(this);
         this.player.subitems().events().addMediaListPlayerEventListener(this);
+
+        this.downloader = new YoutubeDownloader();
     }
 
     @PreDestroy
@@ -56,8 +62,16 @@ public class YoutubePlayer extends MediaPlayerEventAdapter implements Player, Me
 
     @Override
     public void play(Song song) {
-        logger.info(String.format("Play: %s",song.toString()));
-        this.player.media().play(song.getSonglink());
+        logger.info(String.format("Play: %s", song.toString()));
+
+        try {
+            YoutubeVideo video = downloader.getVideo(SongIDParser.getVID(song.getSonglink()));
+            String audioURL = video.audioFormats().get(0).url();
+            this.player.media().play(audioURL);
+        } catch (Exception e) {
+            logger.warn("Youtube Parsing failed, falling back to VLC-Lua");
+            this.player.media().play(song.getSonglink());
+        }
     }
 
     @Override
