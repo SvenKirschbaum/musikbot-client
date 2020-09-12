@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>2.2.2.RELEASE</version>
+        <version>2.3.3.RELEASE</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>de.elite12.musikbot</groupId>
@@ -15,8 +15,8 @@
     <description>New implementation of the Musikbot Client</description>
 
     <properties>
-        <java.version>11</java.version>
-        <!-- Normally this should not be required, as the property is defined in the vlcj-native package. However its gets overwritten from an unknown source, so we have to use this workaround -->
+        <maven.compiler.target>14</maven.compiler.target>
+        <maven.compiler.source>14</maven.compiler.source>
         <jna.version>5.2.0</jna.version>
     </properties>
 
@@ -67,17 +67,17 @@
         <dependency>
             <groupId>uk.co.caprica</groupId>
             <artifactId>vlcj</artifactId>
-            <version>4.5.2</version>
+            <version>4.6.0</version>
         </dependency>
         <dependency>
             <groupId>se.michaelthelin.spotify</groupId>
             <artifactId>spotify-web-api-java</artifactId>
-            <version>6.0.0</version>
+            <version>6.3.0</version>
         </dependency>
         <dependency>
             <groupId>com.github.sealedtx</groupId>
             <artifactId>java-youtube-downloader</artifactId>
-            <version>2.2.4</version>
+            <version>2.3.1</version>
         </dependency>
     </dependencies>
 
