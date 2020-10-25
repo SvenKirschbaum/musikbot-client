@@ -32,7 +32,7 @@ import java.util.TimerTask;
 @Component
 public class SpotifyPlayer implements Player {
 
-    private Logger logger = LoggerFactory.getLogger(SpotifyPlayer.class);
+    private static final Logger logger = LoggerFactory.getLogger(SpotifyPlayer.class);
 
     private SpotifyApi spotifyApi;
 
@@ -121,7 +121,7 @@ public class SpotifyPlayer implements Player {
 
     @Override
     public void play(Song song) {
-        this.logger.info(String.format("Play: %s",song.toString()));
+        logger.info(String.format("Play: %s", song.toString()));
         try {
             String sid = SongIDParser.getSID(song.getSonglink());
             Track track = this.spotifyApi.getTrack(sid).market(CountryCode.DE).build().execute();
@@ -142,7 +142,7 @@ public class SpotifyPlayer implements Player {
 
     @Override
     public void stop() {
-        this.logger.info("Stop");
+        logger.info("Stop");
         this.paused = false;
         try {
             if(this.timer != null) {
@@ -156,7 +156,7 @@ public class SpotifyPlayer implements Player {
 
     @Override
     public void pause() {
-        this.logger.info("Pause");
+        logger.info("Pause");
         try {
             if(!this.paused) {
                 this.spotifyApi.pauseUsersPlayback().build().execute();
