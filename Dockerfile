@@ -1,5 +1,5 @@
 #BUILD
-FROM maven:3.6.3-jdk-14 AS build
+FROM maven:3.6.3-openjdk-15 AS build
 WORKDIR /usr/src/app
 COPY pom.xml .
 COPY lib lib
@@ -8,7 +8,7 @@ COPY src/ ./src/
 RUN mvn -f ./pom.xml package
 
 #PACKAGE
-FROM openjdk:14-buster
+FROM openjdk:15-buster
 RUN apt-get update \
  && apt-get install -y \
     libasound2 \
