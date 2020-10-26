@@ -66,10 +66,11 @@ public class YoutubePlayer extends MediaPlayerEventAdapter implements Player, Me
 
         try {
             YoutubeVideo video = downloader.getVideo(SongIDParser.getVID(song.getSonglink()));
+            logger.info("Available Formats: %s".formatted(video.formats().toString()));
             String audioURL = video.audioFormats().get(0).url();
             this.player.media().play(audioURL);
         } catch (Exception e) {
-            logger.warn("Youtube Parsing failed, falling back to VLC-Lua");
+            logger.warn("Youtube Parsing failed, falling back to VLC-Lua", e);
             this.player.media().play(song.getSonglink());
         }
     }

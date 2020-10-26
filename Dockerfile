@@ -1,11 +1,20 @@
-#BUILD
-FROM maven:3.6.3-openjdk-15 AS build
+#BUILD APP
+FROM maven:3.6.3-openjdk-15 AS build_app
 WORKDIR /usr/src/app
 COPY pom.xml .
 COPY lib lib
 RUN for file in ./lib/*; do mvn org.apache.maven.plugins:maven-install-plugin:2.5.2:install-file -Dfile=$file; done; mvn dependency:go-offline
 COPY src/ ./src/
 RUN mvn -f ./pom.xml package
+
+#BUILD SPOTIFYD
+FROM rust AS build_spotifyd
+RUN apt-get update && apt-get install -y libasound2-dev libssl-dev libpulse-dev libdbus-1-dev
+RUN git clone https://github.com/Spotifyd/spotifyd.git /usr/src/spotifyd
+WORKDIR /usr/src/spotifyd
+RUN cargo build --release --no-default-features --features pulseaudio_backend
+
+
 
 #PACKAGE
 FROM openjdk:15-buster
@@ -38,12 +47,11 @@ RUN apt-get update \
  && mkdir -p /usr/local/teamspeak \
  && wget -q https://files.teamspeak-services.com/releases/client/3.5.3/TeamSpeak3-Client-linux_amd64-3.5.3.run -O /usr/local/teamspeak/install.run \
  && chmod +x /usr/local/teamspeak/install.run \
- && echo -ne "\ny" | (cd /usr/local/teamspeak/ && ./install.run) \
- && mkdir -p /usr/local/spotifyd \
- && wget -qO- https://github.com/Spotifyd/spotifyd/releases/latest/download/spotifyd-linux-slim.tar.gz | tar -C /usr/local/spotifyd/ -xvz
+ && echo -ne "\ny" | (cd /usr/local/teamspeak/ && ./install.run)
 
 COPY ./docker-fs /
 
 ENV TS3_APIKEY M2I6-MKSK-OCHP-JR0T-CY8L-T3H3
-COPY --from=build /usr/src/app/target/clientv2-0.0.1-SNAPSHOT.jar /usr/local/musikbot/musikbot.jar
+COPY --from=build_app /usr/src/app/target/clientv2-0.0.1-SNAPSHOT.jar /usr/local/musikbot/musikbot.jar
+COPY --from=build_spotifyd /usr/src/spotifyd/target/release/spotifyd /usr/local/spotifyd/spotifyd
 ENTRYPOINT ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
