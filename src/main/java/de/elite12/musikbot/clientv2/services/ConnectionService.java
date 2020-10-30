@@ -18,6 +18,7 @@ import org.springframework.web.socket.messaging.WebSocketStompClient;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
+import java.io.IOException;
 import java.lang.reflect.Type;
 import java.util.NoSuchElementException;
 import java.util.Timer;
@@ -26,7 +27,7 @@ import java.util.TimerTask;
 @Service
 public class ConnectionService extends StompSessionHandlerAdapter implements ApplicationListener<SongFinished> {
 
-    private Logger logger = LoggerFactory.getLogger(ConnectionService.class);
+    private final Logger logger = LoggerFactory.getLogger(ConnectionService.class);
 
     @Autowired
     private Clientv2ServiceProperties clientv2ServiceProperties;
@@ -43,7 +44,7 @@ public class ConnectionService extends StompSessionHandlerAdapter implements App
     @Autowired
     private TaskScheduler messageBrokerTaskScheduler;
 
-    private WebSocketStompClient webSocketStompClient;
+    private final WebSocketStompClient webSocketStompClient;
     private StompSession session;
 
     public ConnectionService() {
@@ -168,7 +169,11 @@ public class ConnectionService extends StompSessionHandlerAdapter implements App
 
             @Override
             public void run() {
-                System.exit(0);
+                try {
+                    Runtime.getRuntime().exec("kill 1");
+                } catch (IOException e) {
+                    System.exit(-1);
+                }
             }
         }, 10000);
     }
