@@ -125,8 +125,13 @@ public class SpotifyPlayer implements Player {
         try {
             String sid = SongIDParser.getSID(song.getSonglink());
             Track track = this.spotifyApi.getTrack(sid).market(CountryCode.DE).build().execute();
+
+            if (!track.getIsPlayable()) {
+                throw new SpotifyWebApiException("Provided Track is not playable");
+            }
+
             JsonArray jsonArray = new JsonArray(1);
-            jsonArray.add("spotify:track:"+sid);
+            jsonArray.add("spotify:track:" + sid);
             this.spotifyApi.startResumeUsersPlayback().device_id(this.deviceId).uris(jsonArray).build().execute();
 
             this.cancelTimer();
@@ -136,7 +141,9 @@ public class SpotifyPlayer implements Player {
             this.startTimer();
             this.paused = false;
         } catch (IOException | SpotifyWebApiException | ParseException e) {
-            logger.error("Error stopping spotify playback" ,e);
+            logger.error("Error starting spotify playback", e);
+            this.cancelTimer();
+            this.applicationEventPublisher.publishEvent(new SongFinished(this));
         }
     }
 
