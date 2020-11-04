@@ -45,7 +45,7 @@ RUN apt-get update \
  && rm -f /usr/lib/x86_64-linux-gnu/vlc/lua/playlist/youtube.luac \
  && wget -q https://raw.githubusercontent.com/videolan/vlc/master/share/lua/playlist/youtube.lua -O /usr/lib/x86_64-linux-gnu/vlc/lua/playlist/youtube.lua \
  && mkdir -p /usr/local/teamspeak \
- && wget -q https://files.teamspeak-services.com/releases/client/3.5.3/TeamSpeak3-Client-linux_amd64-3.5.3.run -O /usr/local/teamspeak/install.run \
+ && wget -q https://files.teamspeak-services.com/releases/client/3.5.5/TeamSpeak3-Client-linux_amd64-3.5.5.run -O /usr/local/teamspeak/install.run \
  && chmod +x /usr/local/teamspeak/install.run \
  && echo -ne "\ny" | (cd /usr/local/teamspeak/ && ./install.run)
 
