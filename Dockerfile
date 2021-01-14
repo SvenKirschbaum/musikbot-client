@@ -12,6 +12,8 @@ FROM rust AS build_spotifyd
 RUN apt-get update && apt-get install -y libasound2-dev libssl-dev libpulse-dev libdbus-1-dev
 RUN git clone https://github.com/Spotifyd/spotifyd.git /usr/src/spotifyd
 WORKDIR /usr/src/spotifyd
+#Hotfix for librespot issue, see https://github.com/Spotifyd/spotifyd/issues/719
+RUN rustup override set 1.47.0
 RUN cargo build --release --no-default-features --features pulseaudio_backend
 
 
