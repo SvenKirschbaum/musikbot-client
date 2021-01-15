@@ -12,6 +12,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
 import java.util.NoSuchElementException;
 
 @Service
@@ -57,5 +58,10 @@ public class PlayerService {
             }
         }
         throw new NoSuchElementException(String.format("No player supports the requested Songtype: %s", type));
+    }
+
+    @PreDestroy
+    public void preDestroy() {
+        this.activeplayer.stop();
     }
 }
