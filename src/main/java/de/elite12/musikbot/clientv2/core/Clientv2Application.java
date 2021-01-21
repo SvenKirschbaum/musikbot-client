@@ -37,7 +37,11 @@ public class Clientv2Application implements CommandLineRunner {
     private ConnectionService connectionService;
 
     public static void main(String[] args) {
-        SpringApplication.run(Clientv2Application.class, args);
+        try {
+            SpringApplication.run(Clientv2Application.class, args);
+        } catch (Exception e) {
+            System.exit(-1);
+        }
     }
 
     @Override
