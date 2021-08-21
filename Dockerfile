@@ -17,7 +17,7 @@ RUN cargo build --release --no-default-features --features pulseaudio_backend
 
 
 #PACKAGE
-FROM openjdk:17-bullseye
+FROM openjdk:17-buster
 RUN apt-get update \
  && apt-get install -y \
     libasound2 \
