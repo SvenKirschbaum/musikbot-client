@@ -1,5 +1,5 @@
 #BUILD APP
-FROM maven:3.6.3-openjdk-15 AS build_app
+FROM maven:3.8.2-openjdk-17 AS build_app
 WORKDIR /usr/src/app
 COPY pom.xml .
 COPY lib lib
@@ -19,7 +19,7 @@ RUN cargo build --release --no-default-features --features pulseaudio_backend
 
 
 #PACKAGE
-FROM openjdk:15-buster
+FROM openjdk:17-bullseye
 RUN apt-get update \
  && apt-get install -y \
     libasound2 \

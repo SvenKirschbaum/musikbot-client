@@ -1,7 +1,9 @@
 package de.elite12.musikbot.clientv2.player;
 
 import com.github.kiulian.downloader.YoutubeDownloader;
-import com.github.kiulian.downloader.model.YoutubeVideo;
+import com.github.kiulian.downloader.downloader.request.RequestVideoInfo;
+import com.github.kiulian.downloader.downloader.response.Response;
+import com.github.kiulian.downloader.model.videos.VideoInfo;
 import de.elite12.musikbot.clientv2.events.SongFinished;
 import de.elite12.musikbot.shared.clientDTO.Song;
 import de.elite12.musikbot.shared.util.SongIDParser;
@@ -65,9 +67,13 @@ public class YoutubePlayer extends MediaPlayerEventAdapter implements Player, Me
         logger.info(String.format("Play: %s", song.toString()));
 
         try {
-            YoutubeVideo video = downloader.getVideo(SongIDParser.getVID(song.getSonglink()));
-            logger.debug("Available Formats: %s".formatted(video.formats().toString()));
-            String audioURL = video.audioFormats().get(0).url();
+            Response<VideoInfo> videoInfo = downloader.getVideoInfo(new RequestVideoInfo(SongIDParser.getVID(song.getSonglink())));
+
+            if (!videoInfo.ok()) throw new Exception("Unable to load videoInfo", videoInfo.error());
+
+            logger.debug("Available Formats: %s".formatted(videoInfo.data().formats().toString()));
+
+            String audioURL = videoInfo.data().audioFormats().get(0).url();
             this.player.media().play(audioURL);
         } catch (Exception e) {
             logger.warn("Youtube Parsing failed, falling back to VLC-Lua", e);
