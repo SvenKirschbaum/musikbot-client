@@ -36,13 +36,18 @@ public class Clientv2ServiceProperties {
 	 */
 	private String spotifyapisecret;
 
-	/**
-	 * Spotify Refresh Token
-	 */
-	private String spotifyrefreshtoken;
+    /**
+     * Spotify Refresh Token
+     */
+    private String spotifyrefreshtoken;
 
-	/**
-	 * API key used to connect via clientquery
-	 */
-	private String ts3apikey;
+    /**
+     * API key used to connect via clientquery
+     */
+    private String ts3apikey;
+
+    /**
+     * Token to access discord
+     */
+    private String discordToken;
 }
