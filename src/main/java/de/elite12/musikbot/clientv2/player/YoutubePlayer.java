@@ -30,8 +30,7 @@ public class YoutubePlayer extends MediaPlayerEventAdapter implements Player, Me
 
     private static final String[] vlcj_options = {
             "--no-video",
-            "--network-caching=60000",
-            "--file-caching=500",
+            "--network-caching=300",
             "--no-xlib",
             "--no-metadata-network-access"
     };
