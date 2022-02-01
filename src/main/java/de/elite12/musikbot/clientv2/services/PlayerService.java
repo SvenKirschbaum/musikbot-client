@@ -28,6 +28,8 @@ public class PlayerService {
 
     private final Logger logger = LoggerFactory.getLogger(PlayerService.class);
 
+    private boolean requestingSong = true;
+
     public PlayerService(ListableBeanFactory listableBeanFactory) {
         this.players = listableBeanFactory.getBeansOfType(Player.class).values().toArray(Player[]::new);
         this.activeplayer = this.players[0];
@@ -67,6 +69,7 @@ public class PlayerService {
             }
         }
         if (event.getCommand() instanceof Song) {
+            this.requestingSong = false;
             Song song = (Song) event.getCommand();
             try {
                 this.activatePlayer(song.getSongtype());
@@ -82,5 +85,17 @@ public class PlayerService {
     @EventListener
     public void handleSongFinishedEvent(SongFinishedEvent event) {
         this.applicationEventPublisher.publishEvent(new RequestSongEvent(this));
+    }
+
+    @EventListener
+    public void handleRequestSongEvent(RequestSongEvent event) {
+        this.requestingSong = true;
+    }
+
+    @EventListener
+    public void handleConnectedEvent(ConnectedEvent event) {
+        if (this.requestingSong) {
+            this.applicationEventPublisher.publishEvent(new RequestSongEvent(this));
+        }
     }
 }
