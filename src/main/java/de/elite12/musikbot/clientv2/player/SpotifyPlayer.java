@@ -3,7 +3,7 @@ package de.elite12.musikbot.clientv2.player;
 import com.google.gson.JsonArray;
 import com.neovisionaries.i18n.CountryCode;
 import de.elite12.musikbot.clientv2.core.Clientv2ServiceProperties;
-import de.elite12.musikbot.clientv2.events.SongFinished;
+import de.elite12.musikbot.clientv2.events.SongFinishedEvent;
 import de.elite12.musikbot.shared.clientDTO.Song;
 import de.elite12.musikbot.shared.util.SongIDParser;
 import org.apache.hc.core5.http.ParseException;
@@ -143,7 +143,7 @@ public class SpotifyPlayer implements Player {
         } catch (IOException | SpotifyWebApiException | ParseException e) {
             logger.error("Error starting spotify playback", e);
             this.cancelTimer();
-            this.applicationEventPublisher.publishEvent(new SongFinished(this));
+            this.applicationEventPublisher.publishEvent(new SongFinishedEvent(this));
         }
     }
 
@@ -200,6 +200,6 @@ public class SpotifyPlayer implements Player {
 
     private void finished() {
         logger.info("Playback finished");
-        this.applicationEventPublisher.publishEvent(new SongFinished(this));
+        this.applicationEventPublisher.publishEvent(new SongFinishedEvent(this));
     }
 }

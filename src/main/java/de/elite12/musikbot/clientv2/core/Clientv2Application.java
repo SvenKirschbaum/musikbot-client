@@ -1,14 +1,10 @@
 package de.elite12.musikbot.clientv2.core;
 
-import de.elite12.musikbot.clientv2.services.ConnectionService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.security.oauth2.client.OAuth2ClientProperties;
 import org.springframework.boot.autoconfigure.security.oauth2.client.OAuth2ClientPropertiesRegistrationAdapter;
-import org.springframework.boot.autoconfigure.security.oauth2.client.servlet.OAuth2ClientAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
@@ -31,10 +27,7 @@ import java.util.List;
 @ComponentScan("de.elite12.musikbot.clientv2")
 @EnableScheduling
 @EnableConfigurationProperties(OAuth2ClientProperties.class)
-public class Clientv2Application implements CommandLineRunner {
-
-    @Autowired
-    private ConnectionService connectionService;
+public class Clientv2Application {
 
     public static void main(String[] args) {
         try {
@@ -42,12 +35,6 @@ public class Clientv2Application implements CommandLineRunner {
         } catch (Exception e) {
             System.exit(-1);
         }
-    }
-
-    @Override
-    public void run(String... args) throws Exception {
-        Thread.currentThread().join();
-        new OAuth2ClientAutoConfiguration();
     }
 
     @Configuration

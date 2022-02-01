@@ -7,10 +7,10 @@ import org.springframework.context.ApplicationEvent;
 
 @Getter
 @Setter
-public class StartSong extends ApplicationEvent
-{
+public class StartSongEvent extends ApplicationEvent {
     private Song song;
-    public StartSong(Object source, Song song) {
+
+    public StartSongEvent(Object source, Song song) {
         super(source);
         this.song = song;
     }

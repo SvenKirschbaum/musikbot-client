@@ -4,7 +4,7 @@ import com.github.kiulian.downloader.YoutubeDownloader;
 import com.github.kiulian.downloader.downloader.request.RequestVideoInfo;
 import com.github.kiulian.downloader.downloader.response.Response;
 import com.github.kiulian.downloader.model.videos.VideoInfo;
-import de.elite12.musikbot.clientv2.events.SongFinished;
+import de.elite12.musikbot.clientv2.events.SongFinishedEvent;
 import de.elite12.musikbot.shared.clientDTO.Song;
 import de.elite12.musikbot.shared.util.SongIDParser;
 import org.slf4j.Logger;
@@ -96,13 +96,13 @@ public class YoutubePlayer extends MediaPlayerEventAdapter implements Player, Me
     @Override
     public void error(MediaPlayer mediaPlayer) {
         logger.error("MediaPlayer reported Error");
-        this.applicationEventPublisher.publishEvent(new SongFinished(this));
+        this.applicationEventPublisher.publishEvent(new SongFinishedEvent(this));
     }
 
     @Override
     public void mediaListPlayerFinished(MediaListPlayer mediaListPlayer) {
         logger.info("Playback finished");
-        this.applicationEventPublisher.publishEvent(new SongFinished(this));
+        this.applicationEventPublisher.publishEvent(new SongFinishedEvent(this));
     }
 
     @Override

@@ -1,6 +1,9 @@
 package de.elite12.musikbot.clientv2.services;
 
 import de.elite12.musikbot.clientv2.core.Clientv2ServiceProperties;
+import de.elite12.musikbot.clientv2.events.SongFinishedEvent;
+import de.elite12.musikbot.clientv2.events.StartSongEvent;
+import de.elite12.musikbot.clientv2.events.StopSongEvent;
 import de.elite12.musikbot.clientv2.util.AudioSource;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -14,6 +17,7 @@ import net.dv8tion.jda.api.managers.AudioManager;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import javax.security.auth.login.LoginException;
@@ -34,7 +38,7 @@ public class DiscordService extends ListenerAdapter {
 
         //Retrieve events in this service
         builder.addEventListeners(this);
-        builder.setActivity(Activity.watching("nik94 on twitch"));
+        builder.setActivity(null);
 
         this.JDA = builder.build();
 
@@ -128,5 +132,20 @@ public class DiscordService extends ListenerAdapter {
 
         audioManager.openAudioConnection(channel);
         interactionHook.editOriginal("Will do!").queue();
+    }
+
+    @EventListener
+    public void onSongStart(StartSongEvent event) {
+        this.JDA.getPresence().setActivity(Activity.listening(event.getSong().getSongtitle()));
+    }
+
+    @EventListener
+    public void onSongStop(StopSongEvent event) {
+        this.JDA.getPresence().setActivity(null);
+    }
+
+    @EventListener
+    public void onSongFinished(SongFinishedEvent event) {
+        this.JDA.getPresence().setActivity(null);
     }
 }
