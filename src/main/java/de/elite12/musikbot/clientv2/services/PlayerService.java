@@ -12,7 +12,6 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.util.NoSuchElementException;
 
@@ -33,11 +32,6 @@ public class PlayerService {
     public PlayerService(ListableBeanFactory listableBeanFactory) {
         this.players = listableBeanFactory.getBeansOfType(Player.class).values().toArray(Player[]::new);
         this.activeplayer = this.players[0];
-    }
-
-    @PostConstruct
-    public void postConstruct() {
-        this.applicationEventPublisher.publishEvent(new RequestSongEvent(this));
     }
 
     private void activatePlayer(String type) {

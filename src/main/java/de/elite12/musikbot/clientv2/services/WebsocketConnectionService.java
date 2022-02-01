@@ -11,7 +11,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.context.ApplicationListener;
+import org.springframework.context.event.ContextRefreshedEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.messaging.converter.MappingJackson2MessageConverter;
 import org.springframework.messaging.simp.stomp.*;
 import org.springframework.scheduling.TaskScheduler;
@@ -22,14 +23,13 @@ import org.springframework.web.socket.WebSocketHttpHeaders;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
 
-import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.lang.reflect.Type;
 import java.util.Timer;
 import java.util.TimerTask;
 
 @Service
-public class WebsocketConnectionService implements StompFrameHandler, StompSessionHandler, ApplicationListener<RequestSongEvent> {
+public class WebsocketConnectionService implements StompFrameHandler, StompSessionHandler {
 
     private final Logger logger = LoggerFactory.getLogger(WebsocketConnectionService.class);
 
@@ -52,8 +52,8 @@ public class WebsocketConnectionService implements StompFrameHandler, StompSessi
         this.webSocketStompClient.setDefaultHeartbeat(new long[]{0, 25000});
     }
 
-    @PostConstruct
-    public void postConstruct() {
+    @EventListener
+    public void afterStartup(ContextRefreshedEvent event) {
         this.connect();
     }
 
@@ -119,8 +119,8 @@ public class WebsocketConnectionService implements StompFrameHandler, StompSessi
         if (this.session != null) this.session.send("/musikbot/client", command);
     }
 
-    @Override
-    public void onApplicationEvent(@NotNull RequestSongEvent event) {
+    @EventListener
+    public void onRequestSongEvent(@NotNull RequestSongEvent event) {
         this.sendCommand(new SimpleCommand(SimpleCommand.CommandType.REQUEST_SONG));
     }
 }
