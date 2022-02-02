@@ -9,11 +9,13 @@ import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.audio.AudioSendHandler;
 import net.dv8tion.jda.api.entities.*;
+import net.dv8tion.jda.api.events.guild.voice.GuildVoiceUpdateEvent;
 import net.dv8tion.jda.api.events.interaction.SlashCommandEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import net.dv8tion.jda.api.managers.AudioManager;
+import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,8 +38,12 @@ public class DiscordService extends ListenerAdapter {
     public DiscordService(Clientv2ServiceProperties properties) throws LoginException, InterruptedException {
         JDABuilder builder = JDABuilder.create(properties.getDiscordToken(), EnumSet.of(GUILD_VOICE_STATES));
 
+        //Disable Cache for not needed Features explicitly
+        builder.disableCache(CacheFlag.ACTIVITY, CacheFlag.EMOTE, CacheFlag.CLIENT_STATUS, CacheFlag.ONLINE_STATUS);
+
         //Retrieve events in this service
         builder.addEventListeners(this);
+        //Clear current Activity
         builder.setActivity(null);
 
         this.JDA = builder.build();
@@ -57,6 +63,27 @@ public class DiscordService extends ListenerAdapter {
         }
         if (event.getName().equals("leave")) {
             this.onLeaveCommand(event);
+        }
+    }
+
+    @Override
+    public void onGuildVoiceUpdate(@NotNull GuildVoiceUpdateEvent event) {
+        VoiceChannel currentChannel = event.getGuild().getAudioManager().getConnectedChannel();
+        if (currentChannel != null && Objects.equals(event.getOldValue(), currentChannel)) {
+            if (currentChannel.getMembers().size() <= 1) {
+                this.disconnectVoice(event.getGuild().getAudioManager());
+            }
+        }
+    }
+
+    private void disconnectVoice(AudioManager audioManager) {
+        audioManager.closeAudioConnection();
+
+        AudioSendHandler sendingHandler = audioManager.getSendingHandler();
+
+        if (sendingHandler instanceof AudioSource) {
+            ((AudioSource) sendingHandler).destroy();
+            audioManager.setSendingHandler(null);
         }
     }
 
@@ -82,14 +109,7 @@ public class DiscordService extends ListenerAdapter {
             return;
         }
 
-        audioManager.closeAudioConnection();
-
-        AudioSendHandler sendingHandler = audioManager.getSendingHandler();
-
-        if (sendingHandler instanceof AudioSource) {
-            ((AudioSource) sendingHandler).destroy();
-            audioManager.setSendingHandler(null);
-        }
+        disconnectVoice(audioManager);
 
         interactionHook.editOriginal("Will do!").queue();
     }
