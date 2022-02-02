@@ -19,6 +19,7 @@ import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
@@ -30,6 +31,11 @@ import java.util.Objects;
 import static net.dv8tion.jda.api.requests.GatewayIntent.GUILD_VOICE_STATES;
 
 @Service
+@ConditionalOnProperty(
+        value = "discord.enabled",
+        havingValue = "true",
+        matchIfMissing = true
+)
 public class DiscordService extends ListenerAdapter {
 
     private final Logger logger = LoggerFactory.getLogger(DiscordService.class);

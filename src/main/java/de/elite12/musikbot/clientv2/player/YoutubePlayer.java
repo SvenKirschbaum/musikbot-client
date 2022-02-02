@@ -10,6 +10,7 @@ import de.elite12.musikbot.shared.util.SongIDParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import uk.co.caprica.vlcj.factory.MediaPlayerFactory;
@@ -23,6 +24,11 @@ import javax.annotation.PreDestroy;
 import java.util.Set;
 
 @Component
+@ConditionalOnProperty(
+        value = "player.youtube.enabled",
+        havingValue = "true",
+        matchIfMissing = true
+)
 public class YoutubePlayer extends MediaPlayerEventAdapter implements Player, MediaListPlayerEventListener {
 
     @Autowired

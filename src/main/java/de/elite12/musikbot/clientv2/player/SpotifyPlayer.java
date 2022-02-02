@@ -10,6 +10,7 @@ import org.apache.hc.core5.http.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import se.michaelthelin.spotify.SpotifyApi;
@@ -30,6 +31,11 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 @Component
+@ConditionalOnProperty(
+        value = "player.spotify.enabled",
+        havingValue = "true",
+        matchIfMissing = true
+)
 public class SpotifyPlayer implements Player {
 
     private static final Logger logger = LoggerFactory.getLogger(SpotifyPlayer.class);
