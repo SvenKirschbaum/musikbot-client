@@ -1,0 +1,45 @@
+defaults:
+  actions:
+    queue:
+      name: default
+      method: squash
+
+queue_rules:
+  - name: default
+    conditions: []
+
+pull_request_rules:
+  - name: automatic merge for master
+    conditions:
+      - base=master
+      - -draft
+      - or:
+        - "#approved-reviews-by>=1"
+        - and:
+          - author=fallobst22
+          - "body~=#ignore-review"
+    actions:
+      queue:
+  - name: automatic approve for Renovate pull requests
+    conditions:
+      - author=renovate[bot]
+      - or:
+        - label=minor
+        - label=patch
+    actions:
+      review:
+  - name: assign pr
+    conditions:
+      - -draft
+      - or:
+        - -author=renovate[bot]
+        - and:
+          - -label=minor
+          - -label=patch
+    actions:
+      assign:
+        add_users:
+          - fallobst22
+      request_reviews:
+        users:
+          - fallobst22
