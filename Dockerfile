@@ -1,9 +1,9 @@
 #BUILD APP
-FROM maven:3-openjdk-17 AS build_app
+FROM maven:3-amazoncorretto-17 AS build_app
 WORKDIR /usr/src/app
 COPY pom.xml .
 COPY lib lib
-RUN for file in ./lib/*; do mvn org.apache.maven.plugins:maven-install-plugin:2.5.2:install-file -Dfile=$file; done; mvn dependency:go-offline
+RUN for file in ./lib/*; do mvn org.apache.maven.plugins:maven-install-plugin:install-file -Dfile=$file; done; mvn dependency:go-offline
 COPY src/ ./src/
 RUN mvn -f ./pom.xml package
 
@@ -14,12 +14,16 @@ RUN git clone https://github.com/Spotifyd/spotifyd.git /usr/src/spotifyd
 WORKDIR /usr/src/spotifyd
 RUN cargo build --release --no-default-features --features pulseaudio_backend
 
-
-
 #PACKAGE
-FROM openjdk:17.0.2-bullseye
-RUN apt-get update \
+FROM debian:bullseye-slim
+RUN \
+    apt-get update \
+ && apt-get install -y wget gnupg2 software-properties-common \
+ && (wget -O- https://apt.corretto.aws/corretto.key | apt-key add -) \
+ && add-apt-repository 'deb https://apt.corretto.aws stable main' \
+ && apt-get update \
  && apt-get install -y \
+    java-17-amazon-corretto-jdk \
     libasound2 \
     libdbus-1-3 \
     libegl1 \
@@ -39,7 +43,6 @@ RUN apt-get update \
     pulseaudio \
     supervisor \
     vlc \
-    wget \
     xvfb \
  && rm -rf /var/lib/apt/lists/* \
  && rm -f /usr/lib/x86_64-linux-gnu/vlc/lua/playlist/youtube.luac \
