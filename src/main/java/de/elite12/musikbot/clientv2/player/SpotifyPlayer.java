@@ -6,6 +6,7 @@ import de.elite12.musikbot.clientv2.core.Clientv2ServiceProperties;
 import de.elite12.musikbot.clientv2.events.SongFinishedEvent;
 import de.elite12.musikbot.shared.clientDTO.Song;
 import de.elite12.musikbot.shared.util.SongIDParser;
+import jakarta.annotation.PostConstruct;
 import org.apache.hc.core5.http.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,7 +22,6 @@ import se.michaelthelin.spotify.model_objects.miscellaneous.Device;
 import se.michaelthelin.spotify.model_objects.specification.Track;
 import se.michaelthelin.spotify.requests.authorization.authorization_code.AuthorizationCodeRefreshRequest;
 
-import javax.annotation.PostConstruct;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
@@ -117,7 +117,7 @@ public class SpotifyPlayer implements Player {
                     System.exit(1);
                 }
             }
-        }, (credentials.getExpiresIn() - 60) * 1000);
+        }, (credentials.getExpiresIn() - 60) * 1000L);
     }
 
     @Override
