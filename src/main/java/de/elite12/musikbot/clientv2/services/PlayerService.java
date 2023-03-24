@@ -4,6 +4,7 @@ import de.elite12.musikbot.clientv2.events.*;
 import de.elite12.musikbot.clientv2.player.Player;
 import de.elite12.musikbot.shared.clientDTO.SimpleCommand;
 import de.elite12.musikbot.shared.clientDTO.Song;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ListableBeanFactory;
@@ -12,7 +13,6 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.PreDestroy;
 import java.util.NoSuchElementException;
 
 @Service
@@ -52,8 +52,7 @@ public class PlayerService {
 
     @EventListener
     public void handleCommandEvent(CommandEvent event) {
-        if (event.getCommand() instanceof SimpleCommand) {
-            SimpleCommand command = (SimpleCommand) event.getCommand();
+        if (event.getCommand() instanceof SimpleCommand command) {
             switch (command.getCommand()) {
                 case PAUSE -> this.activeplayer.pause();
                 case STOP -> {
@@ -62,9 +61,8 @@ public class PlayerService {
                 }
             }
         }
-        if (event.getCommand() instanceof Song) {
+        if (event.getCommand() instanceof Song song) {
             this.requestingSong = false;
-            Song song = (Song) event.getCommand();
             try {
                 this.activatePlayer(song.getSongtype());
                 this.activeplayer.play(song);

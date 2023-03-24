@@ -7,6 +7,7 @@ import com.github.kiulian.downloader.model.videos.VideoInfo;
 import de.elite12.musikbot.clientv2.events.SongFinishedEvent;
 import de.elite12.musikbot.shared.clientDTO.Song;
 import de.elite12.musikbot.shared.util.SongIDParser;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,7 +21,6 @@ import uk.co.caprica.vlcj.player.base.MediaPlayerEventAdapter;
 import uk.co.caprica.vlcj.player.list.MediaListPlayer;
 import uk.co.caprica.vlcj.player.list.MediaListPlayerEventListener;
 
-import javax.annotation.PreDestroy;
 import java.util.Set;
 
 @Component

@@ -6,6 +6,7 @@ import de.elite12.musikbot.clientv2.events.ConnectedEvent;
 import de.elite12.musikbot.clientv2.events.RequestSongEvent;
 import de.elite12.musikbot.shared.clientDTO.ClientDTO;
 import de.elite12.musikbot.shared.clientDTO.SimpleCommand;
+import jakarta.annotation.PreDestroy;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,7 +24,6 @@ import org.springframework.web.socket.WebSocketHttpHeaders;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
 
-import javax.annotation.PreDestroy;
 import java.lang.reflect.Type;
 import java.util.Timer;
 import java.util.TimerTask;
