@@ -11,6 +11,7 @@ import net.dv8tion.jda.api.audio.AudioSendHandler;
 import net.dv8tion.jda.api.entities.*;
 import net.dv8tion.jda.api.events.guild.voice.GuildVoiceUpdateEvent;
 import net.dv8tion.jda.api.events.interaction.SlashCommandEvent;
+import net.dv8tion.jda.api.exceptions.InsufficientPermissionException;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
@@ -156,8 +157,12 @@ public class DiscordService extends ListenerAdapter {
             }
         }
 
-        audioManager.openAudioConnection(channel);
-        interactionHook.editOriginal("Will do!").queue();
+        try {
+            audioManager.openAudioConnection(channel);
+            interactionHook.editOriginal("Will do!").queue();
+        } catch (InsufficientPermissionException insufficientPermissionException) {
+            interactionHook.editOriginal("I dont have permissions to join your channel!").queue();
+        }
     }
 
     @EventListener
