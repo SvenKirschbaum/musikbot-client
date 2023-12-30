@@ -54,7 +54,10 @@ RUN \
 
 COPY ./docker-fs /
 
+ENV ENABLE_TEAMSPEAK false
+ENV TS3SERVER ""
 ENV TS3_APIKEY M2I6-MKSK-OCHP-JR0T-CY8L-T3H3
+
 COPY --from=build_app /usr/src/app/target/clientv2-0.0.1-SNAPSHOT.jar /usr/local/musikbot/musikbot.jar
 COPY --from=build_spotifyd /usr/src/spotifyd/target/release/spotifyd /usr/local/spotifyd/spotifyd
 ENTRYPOINT ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
