@@ -1,7 +1,7 @@
 package de.elite12.musikbot.clientv2.services;
 
 import de.elite12.musikbot.clientv2.events.CommandEvent;
-import de.elite12.musikbot.shared.clientDTO.SimpleCommand;
+import de.elite12.musikbot.shared.dtos.ShutdownCommand;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,27 +24,24 @@ public class ShutdownService implements ApplicationListener<CommandEvent> {
 
     @Override
     public void onApplicationEvent(CommandEvent event) {
-        if (event.getCommand() instanceof SimpleCommand) {
-            SimpleCommand command = (SimpleCommand) event.getCommand();
-            if (command.getCommand() == SimpleCommand.CommandType.SHUTDOWN) {
-                logger.warn("Received Shutdown Signal");
-                new Timer().schedule(new TimerTask() {
-                    @Override
-                    public void run() {
-                        SpringApplication.exit(appContext, () -> 0);
+        if (event.getCommand() instanceof ShutdownCommand) {
+            logger.warn("Received Shutdown Signal");
+            new Timer().schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    SpringApplication.exit(appContext, () -> 0);
+                }
+            }, 2500);
+            new Timer().schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    try {
+                        Runtime.getRuntime().exec("kill 1");
+                    } catch (IOException e) {
+                        System.exit(-1);
                     }
-                }, 2500);
-                new Timer().schedule(new TimerTask() {
-                    @Override
-                    public void run() {
-                        try {
-                            Runtime.getRuntime().exec("kill 1");
-                        } catch (IOException e) {
-                            System.exit(-1);
-                        }
-                    }
-                }, 10000);
-            }
+                }
+            }, 10000);
         }
     }
 }

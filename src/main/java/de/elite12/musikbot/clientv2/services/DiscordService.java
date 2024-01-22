@@ -167,7 +167,7 @@ public class DiscordService extends ListenerAdapter {
 
     @EventListener
     public void onSongStart(StartSongEvent event) {
-        this.JDA.getPresence().setActivity(Activity.listening(event.getSong().getSongtitle()));
+        this.JDA.getPresence().setActivity(Activity.listening(event.getSong().getTitle()));
     }
 
     @EventListener

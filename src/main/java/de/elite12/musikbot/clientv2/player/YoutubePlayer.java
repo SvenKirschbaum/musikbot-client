@@ -5,8 +5,8 @@ import com.github.kiulian.downloader.downloader.request.RequestVideoInfo;
 import com.github.kiulian.downloader.downloader.response.Response;
 import com.github.kiulian.downloader.model.videos.VideoInfo;
 import de.elite12.musikbot.clientv2.events.SongFinishedEvent;
-import de.elite12.musikbot.shared.clientDTO.Song;
-import de.elite12.musikbot.shared.util.SongIDParser;
+import de.elite12.musikbot.shared.SongTypes;
+import de.elite12.musikbot.shared.dtos.SongDTO;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,16 +63,16 @@ public class YoutubePlayer extends MediaPlayerEventAdapter implements Player, Me
     }
 
     @Override
-    public Set<String> getSupportedTypes() {
-        return Set.of("youtube");
+    public Set<SongTypes> getSupportedTypes() {
+        return Set.of(SongTypes.YOUTUBE_VIDEO);
     }
 
     @Override
-    public void play(Song song) {
+    public void play(SongDTO song) {
         logger.info(String.format("Play: %s", song.toString()));
 
         try {
-            Response<VideoInfo> videoInfo = downloader.getVideoInfo(new RequestVideoInfo(SongIDParser.getVID(song.getSonglink())));
+            Response<VideoInfo> videoInfo = downloader.getVideoInfo(new RequestVideoInfo(song.getId()));
 
             if (!videoInfo.ok()) throw new Exception("Unable to load videoInfo", videoInfo.error());
 
@@ -82,7 +82,7 @@ public class YoutubePlayer extends MediaPlayerEventAdapter implements Player, Me
             this.player.media().play(audioURL);
         } catch (Exception e) {
             logger.warn("Youtube Parsing failed, falling back to VLC-Lua", e);
-            this.player.media().play(song.getSonglink());
+            this.player.media().play("https://www.youtube.com/watch?v=" + song.getId());
         }
     }
 

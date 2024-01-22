@@ -77,7 +77,7 @@ public class TeamspeakService{
 
     @EventListener
     public void onSongStart(StartSongEvent event) {
-        this.updateDescription(event.getSong().getSongtitle());
+        this.updateDescription(event.getSong().getTitle());
     }
 
     @EventListener

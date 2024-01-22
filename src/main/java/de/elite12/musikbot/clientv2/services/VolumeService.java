@@ -1,7 +1,7 @@
 package de.elite12.musikbot.clientv2.services;
 
 import de.elite12.musikbot.clientv2.events.CommandEvent;
-import de.elite12.musikbot.shared.clientDTO.VolumeCommand;
+import de.elite12.musikbot.shared.dtos.VolumeCommand;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationListener;
@@ -13,12 +13,12 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class VolumeService implements ApplicationListener<CommandEvent> {
 
+    private static final int FADE_STEPS = 10;
     private static final Logger logger = LoggerFactory.getLogger(VolumeService.class);
 
     @Override
     public void onApplicationEvent(CommandEvent event) {
-        if (event.getCommand() instanceof VolumeCommand) {
-            VolumeCommand command = (VolumeCommand) event.getCommand();
+        if (event.getCommand() instanceof VolumeCommand command) {
             try {
                 Process exec = Runtime.getRuntime().exec(new String[]{"pactl", "set-sink-volume", "0", String.format("%d%%", command.getVolume())});
 

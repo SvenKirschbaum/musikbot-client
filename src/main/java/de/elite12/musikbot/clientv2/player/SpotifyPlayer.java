@@ -4,8 +4,8 @@ import com.google.gson.JsonArray;
 import com.neovisionaries.i18n.CountryCode;
 import de.elite12.musikbot.clientv2.core.Clientv2ServiceProperties;
 import de.elite12.musikbot.clientv2.events.SongFinishedEvent;
-import de.elite12.musikbot.shared.clientDTO.Song;
-import de.elite12.musikbot.shared.util.SongIDParser;
+import de.elite12.musikbot.shared.SongTypes;
+import de.elite12.musikbot.shared.dtos.SongDTO;
 import jakarta.annotation.PostConstruct;
 import org.apache.hc.core5.http.ParseException;
 import org.slf4j.Logger;
@@ -77,7 +77,7 @@ public class SpotifyPlayer implements Player {
             Device[] devices = this.spotifyApi.getUsersAvailableDevices().build().execute();
             boolean found = false;
             for (Device d : devices) {
-                if (d.getName().equalsIgnoreCase("Musikbot")) {
+                if (d.getName().equalsIgnoreCase(properties.getSpotifyDeviceName())) {
                     found = true;
                     this.deviceId = d.getId();
                 }
@@ -121,23 +121,22 @@ public class SpotifyPlayer implements Player {
     }
 
     @Override
-    public Set<String> getSupportedTypes() {
-        return Set.of("spotify");
+    public Set<SongTypes> getSupportedTypes() {
+        return Set.of(SongTypes.SPOTIFY_TRACK);
     }
 
     @Override
-    public void play(Song song) {
+    public void play(SongDTO song) {
         logger.info(String.format("Play: %s", song.toString()));
         try {
-            String sid = SongIDParser.getSID(song.getSonglink());
-            Track track = this.spotifyApi.getTrack(sid).market(CountryCode.DE).build().execute();
+            Track track = this.spotifyApi.getTrack(song.getId()).market(CountryCode.DE).build().execute();
 
             if (!track.getIsPlayable()) {
                 throw new SpotifyWebApiException("Provided Track is not playable");
             }
 
             JsonArray jsonArray = new JsonArray(1);
-            jsonArray.add("spotify:track:" + sid);
+            jsonArray.add("spotify:track:" + song.getId());
             this.spotifyApi.startResumeUsersPlayback().device_id(this.deviceId).uris(jsonArray).build().execute();
 
             this.cancelTimer();

@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 @Getter
 @Setter
 public class Clientv2ServiceProperties {
-	
+
 	/**
 	 * Key used to authenticate Client
 	 */
@@ -41,7 +41,12 @@ public class Clientv2ServiceProperties {
      */
     private String spotifyrefreshtoken;
 
-    /**
+	/**
+	 * Spotify Device Name
+	 */
+	private String spotifyDeviceName;
+
+	/**
      * API key used to connect via clientquery
      */
     private String ts3apikey;

@@ -1,6 +1,6 @@
 package de.elite12.musikbot.clientv2.events;
 
-import de.elite12.musikbot.shared.clientDTO.ClientDTO;
+import de.elite12.musikbot.shared.ClientDTO;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.context.ApplicationEvent;

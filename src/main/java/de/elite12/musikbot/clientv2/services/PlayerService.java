@@ -2,8 +2,10 @@ package de.elite12.musikbot.clientv2.services;
 
 import de.elite12.musikbot.clientv2.events.*;
 import de.elite12.musikbot.clientv2.player.Player;
-import de.elite12.musikbot.shared.clientDTO.SimpleCommand;
-import de.elite12.musikbot.shared.clientDTO.Song;
+import de.elite12.musikbot.shared.SongTypes;
+import de.elite12.musikbot.shared.dtos.PauseCommand;
+import de.elite12.musikbot.shared.dtos.SongDTO;
+import de.elite12.musikbot.shared.dtos.StopCommand;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,7 +36,7 @@ public class PlayerService {
         this.activeplayer = this.players[0];
     }
 
-    private void activatePlayer(String type) {
+    private void activatePlayer(SongTypes type) {
         for (Player player : this.players) {
             if (player.getSupportedTypes().contains(type)) {
                 this.activeplayer.stop();
@@ -52,23 +54,21 @@ public class PlayerService {
 
     @EventListener
     public void handleCommandEvent(CommandEvent event) {
-        if (event.getCommand() instanceof SimpleCommand command) {
-            switch (command.getCommand()) {
-                case PAUSE -> this.activeplayer.pause();
-                case STOP -> {
-                    this.activeplayer.stop();
-                    this.applicationEventPublisher.publishEvent(new StopSongEvent(this));
-                }
-            }
+        if (event.getCommand() instanceof PauseCommand) {
+            this.activeplayer.pause();
         }
-        if (event.getCommand() instanceof Song song) {
+        if (event.getCommand() instanceof StopCommand) {
+            this.activeplayer.stop();
+            this.applicationEventPublisher.publishEvent(new StopSongEvent(this));
+        }
+        if (event.getCommand() instanceof SongDTO song) {
             this.requestingSong = false;
             try {
-                this.activatePlayer(song.getSongtype());
+                this.activatePlayer(song.getType());
                 this.activeplayer.play(song);
                 this.applicationEventPublisher.publishEvent(new StartSongEvent(this, song));
             } catch (NoSuchElementException e) {
-                logger.error(String.format("Error playing Song %s", song.getSonglink()), e);
+                logger.error(String.format("Error playing Song: %s", song), e);
                 this.applicationEventPublisher.publishEvent(new RequestSongEvent(this));
             }
         }

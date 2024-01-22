@@ -1,6 +1,7 @@
 package de.elite12.musikbot.clientv2.player;
 
-import de.elite12.musikbot.shared.clientDTO.Song;
+import de.elite12.musikbot.shared.SongTypes;
+import de.elite12.musikbot.shared.dtos.SongDTO;
 import org.springframework.stereotype.Component;
 
 import java.util.Set;
@@ -8,12 +9,12 @@ import java.util.Set;
 @Component
 public class DummyPlayer implements Player {
     @Override
-    public Set<String> getSupportedTypes() {
+    public Set<SongTypes> getSupportedTypes() {
         return Set.of();
     }
 
     @Override
-    public void play(Song song) {
+    public void play(SongDTO song) {
 
     }
 

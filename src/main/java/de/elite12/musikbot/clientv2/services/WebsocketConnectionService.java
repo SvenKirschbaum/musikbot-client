@@ -4,8 +4,8 @@ import de.elite12.musikbot.clientv2.core.Clientv2ServiceProperties;
 import de.elite12.musikbot.clientv2.events.CommandEvent;
 import de.elite12.musikbot.clientv2.events.ConnectedEvent;
 import de.elite12.musikbot.clientv2.events.RequestSongEvent;
-import de.elite12.musikbot.shared.clientDTO.ClientDTO;
-import de.elite12.musikbot.shared.clientDTO.SimpleCommand;
+import de.elite12.musikbot.shared.ClientDTO;
+import de.elite12.musikbot.shared.dtos.SongRequest;
 import jakarta.annotation.PreDestroy;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
@@ -73,7 +73,7 @@ public class WebsocketConnectionService implements StompFrameHandler, StompSessi
         try {
             String type = headers.getFirst("type");
             if (type == null) throw new ClassNotFoundException("Type Header missing");
-            return Class.forName("de.elite12.musikbot.shared.clientDTO." + type);
+            return Class.forName("de.elite12.musikbot.shared.dtos." + type);
         } catch (ClassNotFoundException e) {
             logger.error("Error parsing Message Type", e);
             return Object.class;
@@ -121,6 +121,6 @@ public class WebsocketConnectionService implements StompFrameHandler, StompSessi
 
     @EventListener
     public void onRequestSongEvent(@NotNull RequestSongEvent event) {
-        this.sendCommand(new SimpleCommand(SimpleCommand.CommandType.REQUEST_SONG));
+        this.sendCommand(new SongRequest());
     }
 }
