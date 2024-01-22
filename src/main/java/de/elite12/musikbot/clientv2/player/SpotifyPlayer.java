@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Component;
 import se.michaelthelin.spotify.SpotifyApi;
 import se.michaelthelin.spotify.exceptions.SpotifyWebApiException;
@@ -25,10 +26,8 @@ import se.michaelthelin.spotify.requests.authorization.authorization_code.Author
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Date;
 import java.util.Set;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.concurrent.ScheduledFuture;
 
 @Component
 @ConditionalOnProperty(
@@ -48,11 +47,14 @@ public class SpotifyPlayer implements Player {
     @Autowired
     private ApplicationEventPublisher applicationEventPublisher;
 
+    @Autowired
+    private TaskScheduler taskScheduler;
+
     private String deviceId = "";
 
     private boolean paused = false;
 
-    private Timer timer = null;
+    private ScheduledFuture<?> timer = null;
     private Instant endtime = null;
     private Duration remaining = null;
 
@@ -107,17 +109,14 @@ public class SpotifyPlayer implements Player {
 
         this.spotifyApi.setAccessToken(credentials.getAccessToken());
 
-        new Timer().schedule(new TimerTask() {
-            @Override
-            public void run() {
-                try {
-                    refreshToken();
-                } catch (IOException | SpotifyWebApiException | ParseException e) {
-                    logger.error("Error refreshing Token", e);
-                    System.exit(1);
-                }
+        this.taskScheduler.schedule(() -> {
+            try {
+                refreshToken();
+            } catch (IOException | SpotifyWebApiException | ParseException e) {
+                logger.error("Error refreshing Token", e);
+                System.exit(1);
             }
-        }, (credentials.getExpiresIn() - 60) * 1000L);
+        }, Instant.now().plusSeconds(credentials.getExpiresIn() - 60));
     }
 
     @Override
@@ -140,9 +139,9 @@ public class SpotifyPlayer implements Player {
             this.spotifyApi.startResumeUsersPlayback().device_id(this.deviceId).uris(jsonArray).build().execute();
 
             this.cancelTimer();
-            logger.info(String.format("Song Duration: %dms", track.getDurationMs()));
+            logger.debug(String.format("Song Duration: %dms", track.getDurationMs()));
             this.endtime = Instant.now().plusMillis(track.getDurationMs());
-            logger.info(String.format("End Time: %s", this.endtime.toString()));
+            logger.debug(String.format("End Time: %s", this.endtime.toString()));
             this.startTimer();
             this.paused = false;
         } catch (IOException | SpotifyWebApiException | ParseException e) {
@@ -188,19 +187,13 @@ public class SpotifyPlayer implements Player {
 
     private void cancelTimer() {
         if(this.timer != null) {
-            this.timer.cancel();
+            this.timer.cancel(false);
             this.timer = null;
         }
     }
 
     private void startTimer() {
-        this.timer = new Timer();
-        this.timer.schedule(new TimerTask() {
-            @Override
-            public void run() {
-                finished();
-            }
-        }, Date.from(this.endtime));
+        this.timer = this.taskScheduler.schedule(this::finished, this.endtime);
     }
 
     private void finished() {
