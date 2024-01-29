@@ -1,5 +1,5 @@
 #BUILD APP
-FROM maven:3-amazoncorretto-17 AS build_app
+FROM maven:3.9.6-amazoncorretto-21@sha256:d9b242046b9e8f8a8d80748905812b934a3635f19469fd8a79b58352d71a4a7c AS build_app
 WORKDIR /usr/src/app
 COPY pom.xml .
 COPY lib lib
@@ -8,22 +8,22 @@ COPY src/ ./src/
 RUN mvn -f ./pom.xml package
 
 #BUILD SPOTIFYD
-FROM rust:1-bullseye AS build_spotifyd
+FROM rust:1.75.0-bookworm@sha256:4013eb0e2e5c7157d5f0f11d83594d8bad62238a86957f3d57e447a6a6bdf563 AS build_spotifyd
 RUN apt-get update && apt-get install -y libasound2-dev libssl-dev libpulse-dev libdbus-1-dev
 RUN git clone https://github.com/Spotifyd/spotifyd.git /usr/src/spotifyd
 WORKDIR /usr/src/spotifyd
 RUN cargo build --release --no-default-features --features pulseaudio_backend
 
 #PACKAGE
-FROM debian:bullseye-slim
+FROM debian:12.4-slim@sha256:d6a343a9b7faf367bd975cadb5c9af51874a8ecf1a2b2baa96877d578ac96722
 RUN \
     apt-get update \
  && apt-get install -y wget gnupg2 software-properties-common \
- && (wget -O- https://apt.corretto.aws/corretto.key | apt-key add -) \
- && add-apt-repository 'deb https://apt.corretto.aws stable main' \
+ && (wget -O - https://apt.corretto.aws/corretto.key | gpg --dearmor -o /usr/share/keyrings/corretto-keyring.gpg) \
+ && (echo "deb [signed-by=/usr/share/keyrings/corretto-keyring.gpg] https://apt.corretto.aws stable main" | tee /etc/apt/sources.list.d/corretto.list) \
  && apt-get update \
  && apt-get install -y \
-    java-17-amazon-corretto-jdk \
+    java-21-amazon-corretto-jdk \
     libasound2 \
     libdbus-1-3 \
     libegl1 \
