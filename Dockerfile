@@ -8,14 +8,14 @@ COPY src/ ./src/
 RUN mvn -f ./pom.xml package
 
 #BUILD SPOTIFYD
-FROM rust:1.76.0-bookworm@sha256:8e876026c9dbf43a12c2a15476a5d8f81cc41a56acbb975f04f859170fd0a105 AS build_spotifyd
+FROM rust:1.76.0-bookworm@sha256:a71cd88f9dd32fbdfa67c935f55165ddd89b7166e95de6c053c9bf33dd7381d5 AS build_spotifyd
 RUN apt-get update && apt-get install -y libasound2-dev libssl-dev libpulse-dev libdbus-1-dev
 RUN git clone https://github.com/Spotifyd/spotifyd.git /usr/src/spotifyd
 WORKDIR /usr/src/spotifyd
 RUN cargo build --release --no-default-features --features pulseaudio_backend
 
 #PACKAGE
-FROM debian:12.4-slim@sha256:7802002798b0e351323ed2357ae6dc5a8c4d0a05a57e7f4d8f97136151d3d603
+FROM debian:12.5-slim@sha256:d02c76d82364cedca16ba3ed6f9102406fa9fa8833076a609cabf14270f43dfc
 RUN \
     apt-get update \
  && apt-get install -y wget gnupg2 software-properties-common \
