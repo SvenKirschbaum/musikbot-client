@@ -58,6 +58,8 @@ public class SpotifyPlayer implements Player {
     private Instant endtime = null;
     private Duration remaining = null;
 
+    private Instant accessTokenExpiration = null;
+
     @PostConstruct
     private void postConstruct() {
         this.spotifyApi = new SpotifyApi.Builder()
@@ -103,20 +105,26 @@ public class SpotifyPlayer implements Player {
         }
     }
 
-    private void refreshToken() throws IOException, SpotifyWebApiException, ParseException {
-        AuthorizationCodeRefreshRequest request = this.spotifyApi.authorizationCodeRefresh().build();
-        AuthorizationCodeCredentials credentials = request.execute();
+    private void refreshToken() {
+        try {
+            AuthorizationCodeRefreshRequest request = this.spotifyApi.authorizationCodeRefresh().build();
+            AuthorizationCodeCredentials credentials = request.execute();
 
-        this.spotifyApi.setAccessToken(credentials.getAccessToken());
+            this.spotifyApi.setAccessToken(credentials.getAccessToken());
+            this.accessTokenExpiration = Instant.now().plusSeconds(credentials.getExpiresIn());
 
-        this.taskScheduler.schedule(() -> {
-            try {
-                refreshToken();
-            } catch (IOException | SpotifyWebApiException | ParseException e) {
-                logger.error("Error refreshing Token", e);
+            this.taskScheduler.schedule(this::refreshToken, accessTokenExpiration.minusSeconds(60));
+        } catch (RuntimeException | IOException | SpotifyWebApiException | ParseException e) {
+            if (this.accessTokenExpiration != null && Instant.now().plusSeconds(5).isBefore(this.accessTokenExpiration)) {
+                //We still have some time to refresh the token before it expires
+                logger.error("Error refreshing Token, will retry in 5 seconds", e);
+                this.taskScheduler.schedule(this::refreshToken, Instant.now().plusSeconds(5));
+            } else {
+                //No time left, fail fatally
+                logger.error("Error refreshing Token, system will exit", e);
                 System.exit(1);
             }
-        }, Instant.now().plusSeconds(credentials.getExpiresIn() - 60));
+        }
     }
 
     @Override
