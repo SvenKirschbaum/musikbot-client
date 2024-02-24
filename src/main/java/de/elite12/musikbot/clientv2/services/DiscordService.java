@@ -8,13 +8,17 @@ import de.elite12.musikbot.clientv2.util.AudioSource;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.audio.AudioSendHandler;
-import net.dv8tion.jda.api.entities.*;
+import net.dv8tion.jda.api.entities.Activity;
+import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.GuildVoiceState;
+import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.entities.channel.unions.AudioChannelUnion;
 import net.dv8tion.jda.api.events.guild.voice.GuildVoiceUpdateEvent;
-import net.dv8tion.jda.api.events.interaction.SlashCommandEvent;
+import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.exceptions.InsufficientPermissionException;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.InteractionHook;
-import net.dv8tion.jda.api.interactions.commands.build.CommandData;
+import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.managers.AudioManager;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import org.jetbrains.annotations.NotNull;
@@ -24,7 +28,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
-import javax.security.auth.login.LoginException;
 import javax.sound.sampled.LineUnavailableException;
 import java.util.EnumSet;
 import java.util.Objects;
@@ -42,11 +45,11 @@ public class DiscordService extends ListenerAdapter {
     private final Logger logger = LoggerFactory.getLogger(DiscordService.class);
     private final JDA JDA;
 
-    public DiscordService(Clientv2ServiceProperties properties) throws LoginException, InterruptedException {
+    public DiscordService(Clientv2ServiceProperties properties) throws InterruptedException {
         JDABuilder builder = JDABuilder.create(properties.getDiscordToken(), EnumSet.of(GUILD_VOICE_STATES));
 
         //Disable Cache for not needed Features explicitly
-        builder.disableCache(CacheFlag.ACTIVITY, CacheFlag.EMOTE, CacheFlag.CLIENT_STATUS, CacheFlag.ONLINE_STATUS);
+        builder.disableCache(CacheFlag.ACTIVITY, CacheFlag.EMOJI, CacheFlag.CLIENT_STATUS, CacheFlag.ONLINE_STATUS);
 
         //Retrieve events in this service
         builder.addEventListeners(this);
@@ -56,15 +59,15 @@ public class DiscordService extends ListenerAdapter {
         this.JDA = builder.build();
 
         this.JDA.updateCommands().addCommands(
-                new CommandData("join", "Instruct the Bot to join your current voice channel"),
-                new CommandData("leave", "Instruct the Bot to leave the current voice channel")
+                Commands.slash("join", "Instruct the Bot to join your current voice channel"),
+                Commands.slash("leave", "Instruct the Bot to leave the current voice channel")
         ).queue();
 
         this.JDA.awaitReady();
     }
 
     @Override
-    public void onSlashCommand(@NotNull SlashCommandEvent event) {
+    public void onSlashCommandInteraction(@NotNull SlashCommandInteractionEvent event) {
         if (event.getName().equals("join")) {
             this.onJoinCommand(event);
         }
@@ -75,7 +78,7 @@ public class DiscordService extends ListenerAdapter {
 
     @Override
     public void onGuildVoiceUpdate(@NotNull GuildVoiceUpdateEvent event) {
-        VoiceChannel currentChannel = event.getGuild().getAudioManager().getConnectedChannel();
+        AudioChannelUnion currentChannel = event.getGuild().getAudioManager().getConnectedChannel();
         if (currentChannel != null && Objects.equals(event.getOldValue(), currentChannel)) {
             if (currentChannel.getMembers().size() <= 1) {
                 this.disconnectVoice(event.getGuild().getAudioManager());
@@ -94,7 +97,7 @@ public class DiscordService extends ListenerAdapter {
         }
     }
 
-    private void onLeaveCommand(@NotNull SlashCommandEvent event) {
+    private void onLeaveCommand(@NotNull SlashCommandInteractionEvent event) {
         //Defer Reply
         event.deferReply().queue();
         //Get InteractionHook to later reply
@@ -121,7 +124,7 @@ public class DiscordService extends ListenerAdapter {
         interactionHook.editOriginal("Will do!").queue();
     }
 
-    private void onJoinCommand(@NotNull SlashCommandEvent event) {
+    private void onJoinCommand(@NotNull SlashCommandInteractionEvent event) {
         //Defer Reply
         event.deferReply().queue();
         //Get InteractionHook to later reply
@@ -138,14 +141,14 @@ public class DiscordService extends ListenerAdapter {
         //Cant be Null when the application is correctly configured
         GuildVoiceState voiceState = Objects.requireNonNull(eventMember.getVoiceState());
 
-        if (!voiceState.inVoiceChannel()) {
-            interactionHook.editOriginal("You have to join a Voice-Channel yourself first!").queue();
+        if (!voiceState.inAudioChannel()) {
+            interactionHook.editOriginal("You have to join a Audio-Channel yourself first!").queue();
             return;
         }
 
         Guild guild = Objects.requireNonNull(event.getGuild());
         AudioManager audioManager = guild.getAudioManager();
-        VoiceChannel channel = voiceState.getChannel();
+        AudioChannelUnion channel = voiceState.getChannel();
 
         if (audioManager.getSendingHandler() == null) {
             try {

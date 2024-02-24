@@ -94,7 +94,7 @@ public class WebsocketConnectionService implements StompFrameHandler, StompSessi
     }
 
     @Override
-    public void handleException(@NotNull StompSession session, StompCommand command, @NotNull StompHeaders headers, byte @NotNull [] payload, @NotNull Throwable exception) {
+    public void handleException(@NotNull StompSession session, StompCommand command, @NotNull StompHeaders headers, @NotNull byte[] payload, @NotNull Throwable exception) {
         logger.error("Exception", exception);
     }
 
