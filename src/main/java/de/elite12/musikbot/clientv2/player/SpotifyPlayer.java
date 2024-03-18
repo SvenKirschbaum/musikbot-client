@@ -11,9 +11,12 @@ import org.apache.hc.core5.http.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.actuate.health.Health;
+import org.springframework.boot.actuate.health.HealthIndicator;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.TaskScheduler;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import se.michaelthelin.spotify.SpotifyApi;
 import se.michaelthelin.spotify.exceptions.SpotifyWebApiException;
@@ -35,7 +38,7 @@ import java.util.concurrent.ScheduledFuture;
         havingValue = "true",
         matchIfMissing = true
 )
-public class SpotifyPlayer implements Player {
+public class SpotifyPlayer implements Player, HealthIndicator {
 
     private static final Logger logger = LoggerFactory.getLogger(SpotifyPlayer.class);
 
@@ -77,26 +80,11 @@ public class SpotifyPlayer implements Player {
                 if(currentlyPlayingContext.getIs_playing()) this.stop();
             }
 
-            //Transfer
-            Device[] devices = this.spotifyApi.getUsersAvailableDevices().build().execute();
-            boolean found = false;
-            for (Device d : devices) {
-                if (d.getName().equalsIgnoreCase(properties.getSpotifyDeviceName())) {
-                    found = true;
-                    this.deviceId = d.getId();
-                }
-            }
-
-            if (!found) {
-                throw new SpotifyWebApiException("Musikbot spotifyd has not been found");
-            }
-
-            if(currentlyPlayingContext != null) {
-                if(!currentlyPlayingContext.getDevice().getId().equals(this.deviceId)) {
-                    JsonArray jsonArray = new JsonArray(1);
-                    jsonArray.add(this.deviceId);
-                    this.spotifyApi.transferUsersPlayback(jsonArray).build().execute();
-                }
+            updateSpotifyDevice();
+            while (this.deviceId.isEmpty()) {
+                logger.warn("Spotifyd not found, retrying in 10 seconds");
+                Thread.sleep(10000);
+                updateSpotifyDevice();
             }
 
         } catch(Exception e) {
@@ -207,5 +195,38 @@ public class SpotifyPlayer implements Player {
     private void finished() {
         logger.info("Playback finished");
         this.applicationEventPublisher.publishEvent(new SongFinishedEvent(this));
+    }
+
+    @Override
+    public Health health() {
+        if (this.deviceId.isEmpty()) {
+            return Health.down().withDetail("reason", "Musikbot spotifyd has not been found").build();
+        } else {
+            return Health.up().build();
+        }
+    }
+
+    @Scheduled(fixedRate = 60000)
+    public void updateSpotifyDevice() {
+        try {
+            Device[] devices = this.spotifyApi.getUsersAvailableDevices().build().execute();
+            boolean found = false;
+            for (Device d : devices) {
+                if (d.getName().equalsIgnoreCase(properties.getSpotifyDeviceName())) {
+                    found = true;
+                    if (!this.deviceId.equals(d.getId())) {
+                        this.deviceId = d.getId();
+                        logger.info(String.format("Spotify Device updated: %s", this.deviceId));
+                    }
+                }
+            }
+
+            if (!found) {
+                this.deviceId = "";
+            }
+        } catch (IOException | SpotifyWebApiException | ParseException e) {
+            logger.warn("Error updating Spotify Device", e);
+            this.deviceId = "";
+        }
     }
 }
