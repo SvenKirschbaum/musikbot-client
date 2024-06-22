@@ -1,5 +1,5 @@
 #BUILD APP
-FROM maven:3.9.7-amazoncorretto-21@sha256:45abbf490c5dadba14248ac7224cc492478574751999d4c4fa56490b6b4303a9 AS build_app
+FROM maven:3.9.7-amazoncorretto-21@sha256:09e85c48daef769f40303b123f713829b65ce5473f838b2c1254cbb143eef151 AS build_app
 WORKDIR /usr/src/app
 COPY pom.xml .
 COPY lib lib
