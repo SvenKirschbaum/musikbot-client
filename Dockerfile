@@ -1,5 +1,5 @@
 #BUILD APP
-FROM maven:3.9.8-amazoncorretto-21@sha256:e2350237ba55cd92d9e0ec649b1e3b261c862a2c1459dd272fa4ff9490c17612 AS build_app
+FROM maven:3.9.8-amazoncorretto-21@sha256:fa17d738d0907b4d0c7197b17925e55a5d4afb8f923d007fcd38058eb27030ca AS build_app
 WORKDIR /usr/src/app
 COPY pom.xml .
 COPY lib lib
@@ -8,14 +8,14 @@ COPY src/ ./src/
 RUN mvn -f ./pom.xml package
 
 #BUILD SPOTIFYD
-FROM rust:1.79.0-bookworm@sha256:2c454db58842de39b18057df0617d24eb4f94f77d99ea8dfc0788387d0c9dc81 AS build_spotifyd
+FROM rust:1.79.0-bookworm@sha256:4c45f61ebe054560190f232b7d883f174ff287e1a0972c8f6d7ab88da0188870 AS build_spotifyd
 RUN apt-get update && apt-get install -y libasound2-dev libssl-dev libpulse-dev libdbus-1-dev
 RUN git clone https://github.com/Spotifyd/spotifyd.git /usr/src/spotifyd
 WORKDIR /usr/src/spotifyd
 RUN cargo build --release --no-default-features --features pulseaudio_backend
 
 #PACKAGE
-FROM debian:12.5-slim@sha256:67f3931ad8cb1967beec602d8c0506af1e37e8d73c2a0b38b181ec5d8560d395
+FROM debian:12.6-slim@sha256:f528891ab1aa484bf7233dbcc84f3c806c3e427571d75510a9d74bb5ec535b33
 RUN \
     apt-get update \
  && apt-get install -y wget gnupg2 software-properties-common \
