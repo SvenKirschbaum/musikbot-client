@@ -49,7 +49,7 @@ public class TeamspeakService{
 
             String clidline = reader.readLine();
             logger.debug(clidline);
-            Matcher matcher = Pattern.compile(".*clid=(\\d+).*").matcher(clidline);
+            Matcher matcher = Pattern.compile("clid=(\\d+)").matcher(clidline);
             if(!matcher.find()) throw new IllegalStateException("Unable to match clid");
             String clid = matcher.group(1);
 
@@ -61,7 +61,7 @@ public class TeamspeakService{
 
             String cldbidline = reader.readLine();
             logger.debug(cldbidline);
-            Matcher matcher2 = Pattern.compile(".*client_database_id=(\\d+)").matcher(cldbidline);
+            Matcher matcher2 = Pattern.compile("client_database_id=(\\d+)").matcher(cldbidline);
             if(!matcher2.find()) throw new IllegalStateException("Unable to match cldbid");
             String cldbid = matcher2.group(1);
 
