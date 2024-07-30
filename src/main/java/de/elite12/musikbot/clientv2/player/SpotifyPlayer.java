@@ -74,6 +74,10 @@ public class SpotifyPlayer implements Player, HealthIndicator {
         try {
             this.refreshToken();
 
+            logger.warn("Manually starting spotifyd");
+            Runtime rt = Runtime.getRuntime();
+            rt.exec(new String[]{"/usr/local/spotifyd/spotifyd", "--no-daemon", "--verbose", "--cache-path", "/spotify-cache", "--username",  "musikbot@elite12.de", "--password", this.spotifyApi.getAccessToken()});
+
             CurrentlyPlayingContext currentlyPlayingContext = this.spotifyApi.getInformationAboutUsersCurrentPlayback().build().execute();
 
             if(currentlyPlayingContext != null) {
