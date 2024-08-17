@@ -1,13 +1,5 @@
 {
   "extends": [
     "github>fallobst22/renovate-config"
-  ],
-  "packageRules": [
-    {
-      "matchPackageNames": [
-        "openjdk"
-      ],
-      "allowedVersions": "<18.0.0"
-    }
   ]
 }
