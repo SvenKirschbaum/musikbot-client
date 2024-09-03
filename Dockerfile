@@ -11,9 +11,7 @@ RUN mvn -f ./pom.xml package
 FROM rust:1.80.1-bookworm@sha256:29fe4376919e25b7587a1063d7b521d9db735fc137d3cf30ae41eb326d209471 AS build_spotifyd
 RUN apt-get update && apt-get install -y libasound2-dev libssl-dev libpulse-dev libdbus-1-dev
 RUN git clone https://github.com/Spotifyd/spotifyd.git /usr/src/spotifyd
-COPY token_auth.diff /token_auth.diff
 WORKDIR /usr/src/spotifyd
-RUN git apply < /token_auth.diff
 RUN cargo build --release --no-default-features --features pulseaudio_backend
 
 #PACKAGE
