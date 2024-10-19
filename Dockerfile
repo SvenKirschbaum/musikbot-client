@@ -16,10 +16,14 @@ RUN cargo build --release --no-default-features --features pulseaudio_backend
 
 #PACKAGE
 FROM debian:12.7-slim@sha256:36e591f228bb9b99348f584e83f16e012c33ba5cad44ef5981a1d7c0a93eca22
+
+ADD https://files.teamspeak-services.com/releases/client/3.5.6/TeamSpeak3-Client-linux_amd64-3.5.6.run /usr/local/teamspeak/install.run
+ADD https://apt.corretto.aws/corretto.key /tmp/corretto.key
+
 RUN \
     apt-get update \
- && apt-get install -y wget gnupg2 software-properties-common \
- && (wget -O - https://apt.corretto.aws/corretto.key | gpg --dearmor -o /usr/share/keyrings/corretto-keyring.gpg) \
+ && apt-get install -y gnupg2 software-properties-common \
+ && gpg --dearmor -o /usr/share/keyrings/corretto-keyring.gpg /tmp/corretto.key \
  && (echo "deb [signed-by=/usr/share/keyrings/corretto-keyring.gpg] https://apt.corretto.aws stable main" | tee /etc/apt/sources.list.d/corretto.list) \
  && apt-get update \
  && apt-get install -y \
@@ -46,11 +50,11 @@ RUN \
     xvfb \
  && rm -rf /var/lib/apt/lists/* \
  && rm -f /usr/lib/x86_64-linux-gnu/vlc/lua/playlist/youtube.luac \
- && wget -q https://raw.githubusercontent.com/videolan/vlc/master/share/lua/playlist/youtube.lua -O /usr/lib/x86_64-linux-gnu/vlc/lua/playlist/youtube.lua \
  && mkdir -p /usr/local/teamspeak \
- && wget -q https://files.teamspeak-services.com/releases/client/3.5.6/TeamSpeak3-Client-linux_amd64-3.5.6.run -O /usr/local/teamspeak/install.run \
  && chmod +x /usr/local/teamspeak/install.run \
  && echo -ne "\ny" | (cd /usr/local/teamspeak/ && ./install.run)
+
+ADD https://raw.githubusercontent.com/videolan/vlc/master/share/lua/playlist/youtube.lua /usr/lib/x86_64-linux-gnu/vlc/lua/playlist/youtube.lua
 
 COPY ./docker-fs /
 
