@@ -78,8 +78,8 @@ public class DiscordService extends ListenerAdapter {
 
     @Override
     public void onGuildVoiceUpdate(@NotNull GuildVoiceUpdateEvent event) {
-        AudioChannelUnion currentChannel = event.getGuild().getAudioManager().getConnectedChannel();
-        if (currentChannel != null && Objects.equals(event.getOldValue(), currentChannel)) {
+        AudioChannelUnion currentChannel = Objects.requireNonNull(event.getGuild().getSelfMember().getVoiceState()).getChannel();
+        if (currentChannel != null && (Objects.equals(event.getChannelJoined(), currentChannel) || Objects.equals(event.getChannelLeft(), currentChannel))) {
             if (currentChannel.getMembers().size() <= 1) {
                 this.disconnectVoice(event.getGuild().getAudioManager());
             }
@@ -148,6 +148,8 @@ public class DiscordService extends ListenerAdapter {
 
         Guild guild = Objects.requireNonNull(event.getGuild());
         AudioManager audioManager = guild.getAudioManager();
+        // Disable Auto-Reconnect, to prevent race condition when disconnecting due to being moved into an empty channel
+        audioManager.setAutoReconnect(false);
         AudioChannelUnion channel = voiceState.getChannel();
 
         if (audioManager.getSendingHandler() == null) {
