@@ -27,6 +27,7 @@ RUN \
  && (echo "deb [signed-by=/usr/share/keyrings/corretto-keyring.gpg] https://apt.corretto.aws stable main" | tee /etc/apt/sources.list.d/corretto.list) \
  && apt-get update \
  && apt-get install -y \
+    curl \
     java-21-amazon-corretto-jdk \
     libasound2 \
     libdbus-1-3 \
