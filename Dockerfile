@@ -8,7 +8,7 @@ COPY src/ ./src/
 RUN mvn -f ./pom.xml package
 
 #BUILD SPOTIFYD
-FROM rust:1.86.0-bookworm@sha256:300ec56abce8cc9448ddea2172747d048ed902a3090e6b57babb2bf19f754081 AS build_spotifyd
+FROM rust:1.87.0-bookworm@sha256:5e33ae75f40bf25854fa86e33487f47075016d16726355a72171f67362ad6bf7 AS build_spotifyd
 RUN apt-get update && apt-get install -y libasound2-dev libssl-dev libpulse-dev libdbus-1-dev cmake libclang-dev
 RUN git clone https://github.com/Spotifyd/spotifyd.git /usr/src/spotifyd
 WORKDIR /usr/src/spotifyd
