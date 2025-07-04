@@ -1,5 +1,5 @@
 #BUILD APP
-FROM maven:3.9.10-amazoncorretto-21@sha256:54d36972c85f3a251881fe8d0d220607834519ec2640a9232856c991e2f2ad48 AS build_app
+FROM maven:3.9.10-amazoncorretto-21@sha256:4e3a3d57ae19c5c80e78050f0e580e2decd869ff81f2c9aaa173d070975a0997 AS build_app
 WORKDIR /usr/src/app
 COPY pom.xml .
 COPY lib lib
@@ -8,14 +8,14 @@ COPY src/ ./src/
 RUN mvn -f ./pom.xml package
 
 #BUILD SPOTIFYD
-FROM rust:1.88.0-bookworm@sha256:1928f85f204effc91fddc53875afd042b651552fde6ee11acaafde641942dd70 AS build_spotifyd
+FROM rust:1.88.0-bookworm@sha256:5771a3cc2081935c59ac52b92d49c9e164d4fed92c9f6420aa8cc50364aead6e AS build_spotifyd
 RUN apt-get update && apt-get install -y libasound2-dev libssl-dev libpulse-dev libdbus-1-dev cmake libclang-dev
 RUN git clone https://github.com/Spotifyd/spotifyd.git /usr/src/spotifyd
 WORKDIR /usr/src/spotifyd
 RUN cargo build --release --no-default-features --features pulseaudio_backend
 
 #PACKAGE
-FROM debian:12.11-slim@sha256:e5865e6858dacc255bead044a7f2d0ad8c362433cfaa5acefb670c1edf54dfef
+FROM debian:12.11-slim@sha256:6ac2c08566499cc2415926653cf2ed7c3aedac445675a013cc09469c9e118fdd
 
 ADD https://files.teamspeak-services.com/releases/client/3.5.6/TeamSpeak3-Client-linux_amd64-3.5.6.run /usr/local/teamspeak/install.run
 ADD https://apt.corretto.aws/corretto.key /tmp/corretto.key
