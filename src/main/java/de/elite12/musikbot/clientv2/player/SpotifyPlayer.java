@@ -132,6 +132,7 @@ public class SpotifyPlayer implements Player, HealthIndicator {
 
             JsonArray jsonArray = new JsonArray(1);
             jsonArray.add("spotify:track:" + song.getId());
+            this.spotifyApi.setVolumeForUsersPlayback(100).device_id(this.deviceId).build().execute();
             this.spotifyApi.startResumeUsersPlayback().device_id(this.deviceId).uris(jsonArray).build().execute();
 
             this.cancelTimer();
