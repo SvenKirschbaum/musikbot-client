@@ -12,9 +12,7 @@ FROM rust:1.89.0-bookworm@sha256:e090f7b4adf86191313dba91260351d7f5e15cac0fe34f2
 RUN apt-get update && apt-get install -y libasound2-dev libssl-dev libpulse-dev libdbus-1-dev cmake libclang-dev
 RUN git clone https://github.com/Spotifyd/spotifyd.git /usr/src/spotifyd && \
     git -C /usr/src/spotifyd fetch origin refs/pull/1360/head:tmp && \
-    git -C /usr/src/spotifyd checkout tmp && \
-    sed -i 's/ba3d501/78ce118/g' /usr/src/spotifyd/Cargo.toml && \
-    (cd /usr/src/spotifyd && cargo generate-lockfile)
+    git -C /usr/src/spotifyd checkout tmp
 WORKDIR /usr/src/spotifyd
 RUN cargo build --release --no-default-features --features pulseaudio_backend
 
