@@ -1,5 +1,5 @@
 #BUILD APP
-FROM maven:3.9.11-amazoncorretto-21@sha256:8bb189a6673bb8b674af267ead6037e2d0508c950daac45c3360e57093476c07 AS build_app
+FROM maven:3.9.11-amazoncorretto-25@sha256:82dd40503c5815d4ed879f9b604e02bd85897c43a23b9727d791cc8b73bf3e23 AS build_app
 WORKDIR /usr/src/app
 COPY pom.xml .
 COPY lib lib
@@ -30,7 +30,7 @@ RUN \
  && apt-get update \
  && apt-get install -y \
     curl \
-    java-21-amazon-corretto-jdk \
+    java-25-amazon-corretto-jdk \
     libasound2 \
     libdbus-1-3 \
     libegl1 \
