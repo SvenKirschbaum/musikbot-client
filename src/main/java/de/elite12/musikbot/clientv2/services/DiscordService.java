@@ -1,6 +1,7 @@
 package de.elite12.musikbot.clientv2.services;
 
 import de.elite12.musikbot.clientv2.core.Clientv2ServiceProperties;
+import de.elite12.musikbot.clientv2.events.NoListenerEvent;
 import de.elite12.musikbot.clientv2.events.SongFinishedEvent;
 import de.elite12.musikbot.clientv2.events.StartSongEvent;
 import de.elite12.musikbot.clientv2.events.StopSongEvent;
@@ -24,7 +25,9 @@ import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
@@ -41,6 +44,9 @@ import static net.dv8tion.jda.api.requests.GatewayIntent.GUILD_VOICE_STATES;
         matchIfMissing = true
 )
 public class DiscordService extends ListenerAdapter {
+
+    @Autowired
+    private ApplicationEventPublisher applicationEventPublisher;
 
     private final Logger logger = LoggerFactory.getLogger(DiscordService.class);
     private final JDA JDA;
@@ -79,10 +85,16 @@ public class DiscordService extends ListenerAdapter {
     @Override
     public void onGuildVoiceUpdate(@NotNull GuildVoiceUpdateEvent event) {
         AudioChannelUnion currentChannel = Objects.requireNonNull(event.getGuild().getSelfMember().getVoiceState()).getChannel();
+        //Check if last member in channel
         if (currentChannel != null && (Objects.equals(event.getChannelJoined(), currentChannel) || Objects.equals(event.getChannelLeft(), currentChannel))) {
             if (currentChannel.getMembers().size() <= 1) {
                 this.disconnectVoice(event.getGuild().getAudioManager());
             }
+        }
+
+        //Check if bot has been disconnected
+        if (event.getMember().getIdLong() == this.JDA.getSelfUser().getIdLong() && event.getNewValue() == null) {
+            this.disconnectVoice(event.getGuild().getAudioManager());
         }
     }
 
@@ -95,6 +107,8 @@ public class DiscordService extends ListenerAdapter {
             ((AudioSource) sendingHandler).destroy();
             audioManager.setSendingHandler(null);
         }
+
+        this.checkNoListeners();
     }
 
     private void onLeaveCommand(@NotNull SlashCommandInteractionEvent event) {
@@ -167,6 +181,12 @@ public class DiscordService extends ListenerAdapter {
             interactionHook.editOriginal("Will do!").queue();
         } catch (InsufficientPermissionException insufficientPermissionException) {
             interactionHook.editOriginal("I dont have permissions to join your channel!").queue();
+        }
+    }
+
+    private void checkNoListeners() {
+        if (this.JDA.getAudioManagers().stream().noneMatch(AudioManager::isConnected)) {
+            this.applicationEventPublisher.publishEvent(new NoListenerEvent(this));
         }
     }
 

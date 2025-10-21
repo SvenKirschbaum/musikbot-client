@@ -3,8 +3,10 @@ package de.elite12.musikbot.clientv2.services;
 import de.elite12.musikbot.clientv2.core.Clientv2ServiceProperties;
 import de.elite12.musikbot.clientv2.events.CommandEvent;
 import de.elite12.musikbot.clientv2.events.ConnectedEvent;
+import de.elite12.musikbot.clientv2.events.NoListenerEvent;
 import de.elite12.musikbot.clientv2.events.RequestSongEvent;
 import de.elite12.musikbot.shared.ClientDTO;
+import de.elite12.musikbot.shared.dtos.NoListenerCommand;
 import de.elite12.musikbot.shared.dtos.SongRequest;
 import jakarta.annotation.PreDestroy;
 import org.jetbrains.annotations.NotNull;
@@ -122,5 +124,10 @@ public class WebsocketConnectionService implements StompFrameHandler, StompSessi
     @EventListener
     public void onRequestSongEvent(@NotNull RequestSongEvent event) {
         this.sendCommand(new SongRequest());
+    }
+
+    @EventListener
+    public void onNoListenerEvent(@NotNull NoListenerEvent event) {
+        this.sendCommand(new NoListenerCommand());
     }
 }
