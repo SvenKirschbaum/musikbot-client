@@ -57,8 +57,6 @@ RUN \
  && chmod +x /usr/local/teamspeak/install.run \
  && echo -ne "\ny" | (cd /usr/local/teamspeak/ && ./install.run)
 
-ADD https://raw.githubusercontent.com/videolan/vlc/master/share/lua/playlist/youtube.lua /usr/lib/x86_64-linux-gnu/vlc/lua/playlist/youtube.lua
-
 COPY ./docker-fs /
 
 ENV ENABLE_TEAMSPEAK false
