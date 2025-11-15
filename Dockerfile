@@ -11,7 +11,7 @@ RUN mvn -f ./pom.xml package
 FROM rust:1.91.1-bookworm@sha256:af8fc166ddc0b7aa469f695dbb57c6f859dd440162dab6130d7e4714cbbf8dca AS build_spotifyd
 RUN apt-get update && apt-get install -y libasound2-dev libssl-dev libpulse-dev libdbus-1-dev cmake libclang-dev
 RUN git clone https://github.com/Spotifyd/spotifyd.git /usr/src/spotifyd && \
-    git -C /usr/src/spotifyd fetch origin refs/pull/1360/head:tmp && \
+    git -C /usr/src/spotifyd fetch origin refs/pull/1374/head:tmp && \
     git -C /usr/src/spotifyd checkout tmp
 WORKDIR /usr/src/spotifyd
 RUN cargo build --release --no-default-features --features pulseaudio_backend
