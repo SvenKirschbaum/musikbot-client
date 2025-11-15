@@ -3,9 +3,9 @@ package de.elite12.musikbot.clientv2.player;
 import com.google.gson.JsonArray;
 import com.neovisionaries.i18n.CountryCode;
 import de.elite12.musikbot.clientv2.core.Clientv2ServiceProperties;
+import de.elite12.musikbot.clientv2.data.SongTypes;
+import de.elite12.musikbot.clientv2.events.PlayCommandEvent;
 import de.elite12.musikbot.clientv2.events.SongFinishedEvent;
-import de.elite12.musikbot.shared.SongTypes;
-import de.elite12.musikbot.shared.dtos.SongDTO;
 import jakarta.annotation.PostConstruct;
 import org.apache.hc.core5.http.ParseException;
 import org.slf4j.Logger;
@@ -121,7 +121,7 @@ public class SpotifyPlayer implements Player, HealthIndicator {
     }
 
     @Override
-    public void play(SongDTO song) {
+    public void play(PlayCommandEvent song) {
         logger.info(String.format("Play: %s", song.toString()));
         try {
             Track track = this.spotifyApi.getTrack(song.getId()).market(CountryCode.DE).build().execute();

@@ -6,9 +6,9 @@ import com.github.kiulian.downloader.downloader.response.Response;
 import com.github.kiulian.downloader.model.videos.VideoInfo;
 import de.elite12.musikbot.clientv2.data.CobaltRequest;
 import de.elite12.musikbot.clientv2.data.CobaltResponse;
+import de.elite12.musikbot.clientv2.data.SongTypes;
+import de.elite12.musikbot.clientv2.events.PlayCommandEvent;
 import de.elite12.musikbot.clientv2.events.SongFinishedEvent;
-import de.elite12.musikbot.shared.SongTypes;
-import de.elite12.musikbot.shared.dtos.SongDTO;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -77,7 +77,7 @@ public class YoutubePlayer extends MediaPlayerEventAdapter implements Player, Me
     }
 
     @Override
-    public void play(SongDTO song) {
+    public void play(PlayCommandEvent song) {
         logger.info(String.format("Play: %s", song.toString()));
 
         try {

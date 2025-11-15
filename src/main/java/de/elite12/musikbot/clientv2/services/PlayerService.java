@@ -1,11 +1,8 @@
 package de.elite12.musikbot.clientv2.services;
 
+import de.elite12.musikbot.clientv2.data.SongTypes;
 import de.elite12.musikbot.clientv2.events.*;
 import de.elite12.musikbot.clientv2.player.Player;
-import de.elite12.musikbot.shared.SongTypes;
-import de.elite12.musikbot.shared.dtos.PauseCommand;
-import de.elite12.musikbot.shared.dtos.SongDTO;
-import de.elite12.musikbot.shared.dtos.StopCommand;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,25 +49,26 @@ public class PlayerService {
         this.activeplayer.stop();
     }
 
+
     @EventListener
-    public void handleCommandEvent(CommandEvent event) {
-        if (event.getCommand() instanceof PauseCommand) {
-            this.activeplayer.pause();
-        }
-        if (event.getCommand() instanceof StopCommand) {
-            this.activeplayer.stop();
-            this.applicationEventPublisher.publishEvent(new StopSongEvent(this));
-        }
-        if (event.getCommand() instanceof SongDTO song) {
-            this.requestingSong = false;
-            try {
-                this.activatePlayer(song.getType());
-                this.activeplayer.play(song);
-                this.applicationEventPublisher.publishEvent(new StartSongEvent(this, song));
-            } catch (NoSuchElementException e) {
-                logger.error(String.format("Error playing Song: %s", song), e);
-                this.applicationEventPublisher.publishEvent(new RequestSongEvent(this));
-            }
+    public void on(PauseCommandEvent event) {
+        this.activeplayer.pause();
+    }
+
+    @EventListener
+    public void on(StopCommandEvent event) {
+        this.activeplayer.stop();
+    }
+
+    @EventListener
+    public void on(PlayCommandEvent event) {
+        this.requestingSong = false;
+        try {
+            this.activatePlayer(event.getSongType());
+            this.activeplayer.play(event);
+        } catch (NoSuchElementException e) {
+            logger.error(String.format("Error playing Song: %s", event), e);
+            this.applicationEventPublisher.publishEvent(new RequestSongEvent(this));
         }
     }
 

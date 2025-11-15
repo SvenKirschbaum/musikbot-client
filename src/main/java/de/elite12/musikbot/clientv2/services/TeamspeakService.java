@@ -1,9 +1,9 @@
 package de.elite12.musikbot.clientv2.services;
 
 import de.elite12.musikbot.clientv2.core.Clientv2ServiceProperties;
+import de.elite12.musikbot.clientv2.events.PlayCommandEvent;
 import de.elite12.musikbot.clientv2.events.SongFinishedEvent;
-import de.elite12.musikbot.clientv2.events.StartSongEvent;
-import de.elite12.musikbot.clientv2.events.StopSongEvent;
+import de.elite12.musikbot.clientv2.events.StopCommandEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -76,12 +76,12 @@ public class TeamspeakService{
     }
 
     @EventListener
-    public void onSongStart(StartSongEvent event) {
-        this.updateDescription(event.getSong().getTitle());
+    public void onSongStart(PlayCommandEvent event) {
+        this.updateDescription(event.getTitle());
     }
 
     @EventListener
-    public void onSongStop(StopSongEvent event) {
+    public void onSongStop(StopCommandEvent event) {
         this.updateDescription("");
     }
 

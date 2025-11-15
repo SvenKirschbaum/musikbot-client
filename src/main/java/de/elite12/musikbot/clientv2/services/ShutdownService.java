@@ -1,7 +1,6 @@
 package de.elite12.musikbot.clientv2.services;
 
-import de.elite12.musikbot.clientv2.events.CommandEvent;
-import de.elite12.musikbot.shared.dtos.ShutdownCommand;
+import de.elite12.musikbot.clientv2.events.ShutdownCommandEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,7 +14,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 @Service
-public class ShutdownService implements ApplicationListener<CommandEvent> {
+public class ShutdownService implements ApplicationListener<ShutdownCommandEvent> {
 
     private final Logger logger = LoggerFactory.getLogger(ShutdownService.class);
 
@@ -23,25 +22,23 @@ public class ShutdownService implements ApplicationListener<CommandEvent> {
     private ApplicationContext appContext;
 
     @Override
-    public void onApplicationEvent(CommandEvent event) {
-        if (event.getCommand() instanceof ShutdownCommand) {
-            logger.warn("Received Shutdown Signal");
-            new Timer().schedule(new TimerTask() {
-                @Override
-                public void run() {
-                    SpringApplication.exit(appContext, () -> 0);
+    public void onApplicationEvent(ShutdownCommandEvent event) {
+        logger.warn("Received Shutdown Signal");
+        new Timer().schedule(new TimerTask() {
+            @Override
+            public void run() {
+                SpringApplication.exit(appContext, () -> 0);
+            }
+        }, 2500);
+        new Timer().schedule(new TimerTask() {
+            @Override
+            public void run() {
+                try {
+                    Runtime.getRuntime().exec("kill 1");
+                } catch (IOException e) {
+                    System.exit(-1);
                 }
-            }, 2500);
-            new Timer().schedule(new TimerTask() {
-                @Override
-                public void run() {
-                    try {
-                        Runtime.getRuntime().exec("kill 1");
-                    } catch (IOException e) {
-                        System.exit(-1);
-                    }
-                }
-            }, 10000);
-        }
+            }
+        }, 10000);
     }
 }

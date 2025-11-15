@@ -1,7 +1,7 @@
 package de.elite12.musikbot.clientv2.player;
 
-import de.elite12.musikbot.shared.SongTypes;
-import de.elite12.musikbot.shared.dtos.SongDTO;
+import de.elite12.musikbot.clientv2.data.SongTypes;
+import de.elite12.musikbot.clientv2.events.PlayCommandEvent;
 import org.springframework.stereotype.Component;
 
 import java.util.Set;
@@ -14,7 +14,7 @@ public class DummyPlayer implements Player {
     }
 
     @Override
-    public void play(SongDTO song) {
+    public void play(PlayCommandEvent song) {
 
     }
 
