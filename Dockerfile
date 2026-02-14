@@ -1,5 +1,5 @@
 #BUILD APP
-FROM maven:3.9.12-amazoncorretto-25@sha256:51efd6f862955c0893739c99c0d037bd7cc3eaf6f7db59f6d1899adaef775ca8 AS build_app
+FROM maven:3.9.12-amazoncorretto-25@sha256:442af0dae8385a09c3c8131536a8905cf87046d9c4483d7937ff5f6e1ef92b5c AS build_app
 WORKDIR /usr/src/app
 COPY pom.xml .
 COPY lib lib
@@ -8,7 +8,7 @@ COPY src/ ./src/
 RUN mvn -f ./pom.xml package
 
 #BUILD SPOTIFYD
-FROM rust:1.93.0-bookworm@sha256:d0a4aa3ca2e1088ac0c81690914a0d810f2eee188197034edf366ed010a2b382 AS build_spotifyd
+FROM rust:1.93.1-bookworm@sha256:c38b1b917cb749e50aea7dd6e87f6e315d62a4bc84e38d63f5eb8b1908db1b9a AS build_spotifyd
 RUN apt-get update && apt-get install -y libasound2-dev libssl-dev libpulse-dev libdbus-1-dev cmake libclang-dev
 RUN git clone https://github.com/Spotifyd/spotifyd.git /usr/src/spotifyd && \
     git -C /usr/src/spotifyd fetch origin refs/pull/1374/head:tmp && \
