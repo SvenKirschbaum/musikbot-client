@@ -67,7 +67,7 @@ public class WebsocketConnectionService implements StompFrameHandler, StompSessi
     private void connect() {
         WebSocketHttpHeaders webSocketHttpHeaders = new WebSocketHttpHeaders();
         webSocketHttpHeaders.setBearerAuth(oAuth2AuthorizedClientManager.authorize(OAuth2AuthorizeRequest.withClientRegistrationId("musikbot").principal("musikbot").build()).getAccessToken().getTokenValue());
-        this.webSocketStompClient.connect(clientv2ServiceProperties.getServerurl(), webSocketHttpHeaders, this);
+        this.webSocketStompClient.connectAsync(clientv2ServiceProperties.getServerurl(), webSocketHttpHeaders, this);
     }
 
     @Override
