@@ -1,5 +1,5 @@
 #BUILD APP
-FROM maven:3.9.15-amazoncorretto-25@sha256:34bc70472c811fd05b4fce8071685a76b974148a9997e6e2b14a61044f3f40fb AS build_app
+FROM maven:3.9.15-amazoncorretto-25@sha256:5d270f238645533767a660ec6747c98a8d6b269b8f0dd170ccd02ab14f136d29 AS build_app
 WORKDIR /usr/src/app
 COPY pom.xml .
 COPY lib lib
@@ -17,7 +17,7 @@ WORKDIR /usr/src/spotifyd
 RUN cargo build --release --no-default-features --features pulseaudio_backend
 
 #PACKAGE
-FROM debian:13.4-slim@sha256:cedb1ef40439206b673ee8b33a46a03a0c9fa90bf3732f54704f99cb061d2c5a
+FROM debian:13.4-slim@sha256:109e2c65005bf160609e4ba6acf7783752f8502ad218e298253428690b9eaa4b
 
 ADD https://files.teamspeak-services.com/releases/client/3.5.6/TeamSpeak3-Client-linux_amd64-3.5.6.run /usr/local/teamspeak/install.run
 ADD https://apt.corretto.aws/corretto.key /tmp/corretto.key
