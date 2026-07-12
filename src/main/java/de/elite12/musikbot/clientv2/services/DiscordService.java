@@ -6,8 +6,10 @@ import de.elite12.musikbot.clientv2.events.SongFinishedEvent;
 import de.elite12.musikbot.clientv2.events.StartSongEvent;
 import de.elite12.musikbot.clientv2.events.StopSongEvent;
 import de.elite12.musikbot.clientv2.util.AudioSource;
+import club.minnced.discord.jdave.interop.JDaveSessionFactory;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
+import net.dv8tion.jda.api.audio.AudioModuleConfig;
 import net.dv8tion.jda.api.audio.AudioSendHandler;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.Guild;
@@ -53,6 +55,7 @@ public class DiscordService extends ListenerAdapter {
 
     public DiscordService(Clientv2ServiceProperties properties) throws InterruptedException {
         JDABuilder builder = JDABuilder.create(properties.getDiscordToken(), EnumSet.of(GUILD_VOICE_STATES));
+        builder.setAudioModuleConfig(new AudioModuleConfig().withDaveSessionFactory(new JDaveSessionFactory()));
 
         //Disable Cache for not needed Features explicitly
         builder.disableCache(CacheFlag.ACTIVITY, CacheFlag.EMOJI, CacheFlag.CLIENT_STATUS, CacheFlag.ONLINE_STATUS);
