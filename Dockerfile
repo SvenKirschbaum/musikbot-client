@@ -8,7 +8,7 @@ COPY src/ ./src/
 RUN mvn -f ./pom.xml package
 
 #BUILD SPOTIFYD
-FROM rust:1.97.0-bookworm@sha256:7d0723df719e7f213b69dc7c8c595985c3f4b060cfbee4f7bc0e347a86fe3b6a AS build_spotifyd
+FROM rust:1.97.1-bookworm@sha256:77fac8b98f9f46062bb680b6d25d5bcaabfc400143952ebc572e924bcbedc3fa AS build_spotifyd
 RUN apt-get update && apt-get install -y libasound2-dev libssl-dev libpulse-dev libdbus-1-dev cmake libclang-dev
 RUN git clone https://github.com/Spotifyd/spotifyd.git /usr/src/spotifyd && \
     git -C /usr/src/spotifyd fetch origin refs/pull/1374/head:tmp && \
@@ -17,7 +17,7 @@ WORKDIR /usr/src/spotifyd
 RUN cargo build --release --no-default-features --features pulseaudio_backend
 
 #PACKAGE
-FROM debian:13.5-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
+FROM debian:13.6-slim@sha256:020c0d20b9880058cbe785a9db107156c3c75c2ac944a6aa7ab59f2add76a7bd
 
 ADD https://files.teamspeak-services.com/releases/client/3.5.6/TeamSpeak3-Client-linux_amd64-3.5.6.run /usr/local/teamspeak/install.run
 ADD https://apt.corretto.aws/corretto.key /tmp/corretto.key
