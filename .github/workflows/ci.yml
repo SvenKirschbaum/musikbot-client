@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+env:
+  REGISTRY: registry.gitlab.com
+  IMAGE_NAMESPACE: fallobst22/images
+  IMAGE: musikbot-client
+  VERSION_OFFSET: 339
+
+permissions:
+  contents: read
+  id-token: write
+  packages: read
+
+jobs:
+  docker-image:
+    name: Build Docker image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Write Maven settings
+        env:
+          PACKAGE_TOKEN: ${{ secrets.MUSIKBOT_PACKAGES_READ_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          cat > "${RUNNER_TEMP}/settings.xml" <<EOF
+          <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
+            <servers>
+              <server>
+                <id>github</id>
+                <username>${GITHUB_ACTOR}</username>
+                <password>${PACKAGE_TOKEN}</password>
+              </server>
+            </servers>
+            <profiles>
+              <profile>
+                <id>github-packages</id>
+                <repositories>
+                  <repository>
+                    <id>github</id>
+                    <url>https://maven.pkg.github.com/SvenKirschbaum/musikbot-lib</url>
+                    <snapshots><enabled>true</enabled></snapshots>
+                  </repository>
+                </repositories>
+              </profile>
+            </profiles>
+            <activeProfiles>
+              <activeProfile>github-packages</activeProfile>
+            </activeProfiles>
+          </settings>
+          EOF
+
+      - name: Package
+        run: mvn --batch-mode -s "${RUNNER_TEMP}/settings.xml" package
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute Docker metadata
+        id: meta
+        run: |
+          version=$((GITHUB_RUN_NUMBER + VERSION_OFFSET))
+          image_ref="${REGISTRY}/${IMAGE_NAMESPACE}/${IMAGE}"
+          {
+            echo "version=${version}"
+            echo "primary_tag=${image_ref}:v${version}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          pull: true
+          push: false
+          secret-files: |
+            maven_settings=${{ runner.temp }}/settings.xml
+          tags: ${{ steps.meta.outputs.primary_tag }}
+
+      - name: Scan Docker image with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.meta.outputs.primary_tag }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: 0
+
+      - name: Log in to GitLab Container Registry
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.GITLAB_REGISTRY_USERNAME }}
+          password: ${{ secrets.GITLAB_REGISTRY_PASSWORD }}
+
+      - name: Push Docker image
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+        run: docker push "${{ steps.meta.outputs.primary_tag }}"
+
+      - name: Trigger Flux image scans
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+        env:
+          WEBHOOK_URLS: ${{ secrets.FLUX_IMAGE_WEBHOOK_URLS }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${WEBHOOK_URLS}" ]]; then
+            echo "No Flux image webhook URLs configured; skipping."
+            exit 0
+          fi
+
+          oidc_token="$(
+            curl -fsSL \
+              -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=notification-controller" \
+              | jq -r '.value'
+          )"
+          payload="$(jq -cn --arg image "${IMAGE}" '{images: [$image]}')"
+
+          while IFS= read -r webhook_url; do
+            if [[ -z "${webhook_url}" ]]; then
+              continue
+            fi
+
+            echo "Calling Flux image webhook: ${webhook_url}"
+            if [[ "${webhook_url}" =~ ^([^:]+)://([^/?#]+) ]]; then
+              echo "Flux image webhook endpoint: ${BASH_REMATCH[1]}://${BASH_REMATCH[2]}"
+            fi
+
+            curl -fsS \
+              -X POST \
+              -H "Authorization: Bearer ${oidc_token}" \
+              -H "Content-Type: application/json" \
+              --data "${payload}" \
+              "${webhook_url}"
+          done <<< "${WEBHOOK_URLS}"

@@ -1,5 +1,11 @@
 {
-  "extends": [
-    "github>fallobst22/renovate-config"
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["github>fallobst22/renovate-config"],
+  "packageRules": [
+    {
+      "matchManagers": ["maven"],
+      "matchPackageNames": ["de.elite12.musikbot:libmusikbot"],
+      "registryUrls": ["https://maven.pkg.github.com/SvenKirschbaum/musikbot-lib"]
+    }
   ]
 }

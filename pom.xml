@@ -15,6 +15,7 @@
     <description>New implementation of the Musikbot Client</description>
 
     <properties>
+        <musikbot-lib.version>0.0.6</musikbot-lib.version>
         <maven.compiler.target>25</maven.compiler.target>
         <maven.compiler.source>25</maven.compiler.source>
         <jna.version>5.2.0</jna.version>
@@ -73,7 +74,7 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>libmusikbot</artifactId>
-            <version>${project.version}</version>
+            <version>${musikbot-lib.version}</version>
         </dependency>
         <dependency>
             <groupId>uk.co.caprica</groupId>

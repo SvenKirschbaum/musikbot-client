@@ -1,11 +1,14 @@
+# syntax=docker/dockerfile:1.7
+
 #BUILD APP
 FROM maven:3.9.16-amazoncorretto-25@sha256:4de04d5fe425efd2a5c21ea6c3c53f9f2c4c1381f1d7890d203d237c83fbc816 AS build_app
 WORKDIR /usr/src/app
 COPY pom.xml .
-COPY lib lib
-RUN for file in ./lib/*; do mvn org.apache.maven.plugins:maven-install-plugin:install-file -Dfile=$file; done; mvn dependency:go-offline
+RUN --mount=type=secret,id=maven_settings,target=/root/.m2/settings.xml \
+    mvn -s /root/.m2/settings.xml dependency:go-offline
 COPY src/ ./src/
-RUN mvn -f ./pom.xml package
+RUN --mount=type=secret,id=maven_settings,target=/root/.m2/settings.xml \
+    mvn -s /root/.m2/settings.xml -f ./pom.xml package
 
 #BUILD SPOTIFYD
 FROM rust:1.97.1-bookworm@sha256:77fac8b98f9f46062bb680b6d25d5bcaabfc400143952ebc572e924bcbedc3fa AS build_spotifyd
