@@ -75,7 +75,7 @@ class SoftwareVolumeTest {
     }
 
     @Test
-    void fullVolumeKeepsSamplesAtSaturationLimits() {
+    void fullVolumePreservesSignedSampleEndpoints() {
         SoftwareVolume volume = new SoftwareVolume();
         volume.setPercent(100);
         byte[] frame = samples(Short.MAX_VALUE, Short.MIN_VALUE);

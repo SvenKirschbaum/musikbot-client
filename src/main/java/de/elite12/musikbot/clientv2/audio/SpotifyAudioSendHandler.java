@@ -26,7 +26,7 @@ public final class SpotifyAudioSendHandler implements AudioSendHandler, AutoClos
 
     @Nullable
     @Override
-    public ByteBuffer provide20MsAudio() {
+    public synchronized ByteBuffer provide20MsAudio() {
         byte[] frame = frames.poll();
         return frame == null ? null : ByteBuffer.wrap(frame);
     }
@@ -43,13 +43,18 @@ public final class SpotifyAudioSendHandler implements AudioSendHandler, AutoClos
         }
     }
 
-    synchronized void enqueue(byte[] frame, LongConsumer droppedFrames) {
-        if (closed.get()) {
-            return;
+    void enqueue(byte[] frame, LongConsumer droppedFrames) {
+        boolean dropped = false;
+        synchronized (this) {
+            if (closed.get()) {
+                return;
+            }
+            if (!frames.offer(frame)) {
+                dropped = frames.poll() != null;
+                frames.offer(frame);
+            }
         }
-        if (!frames.offer(frame)) {
-            frames.poll();
-            frames.offer(frame);
+        if (dropped) {
             droppedFrames.accept(1);
         }
     }
