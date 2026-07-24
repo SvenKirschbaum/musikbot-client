@@ -5,7 +5,8 @@ import de.elite12.musikbot.clientv2.events.NoListenerEvent;
 import de.elite12.musikbot.clientv2.events.SongFinishedEvent;
 import de.elite12.musikbot.clientv2.events.StartSongEvent;
 import de.elite12.musikbot.clientv2.events.StopSongEvent;
-import de.elite12.musikbot.clientv2.util.AudioSource;
+import de.elite12.musikbot.clientv2.audio.SpotifyAudioPipeline;
+import de.elite12.musikbot.clientv2.audio.SpotifyAudioSendHandler;
 import club.minnced.discord.jdave.interop.JDaveSessionFactory;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -25,15 +26,12 @@ import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.managers.AudioManager;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import org.jetbrains.annotations.NotNull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
-import javax.sound.sampled.LineUnavailableException;
 import java.util.EnumSet;
 import java.util.Objects;
 
@@ -50,10 +48,11 @@ public class DiscordService extends ListenerAdapter {
     @Autowired
     private ApplicationEventPublisher applicationEventPublisher;
 
-    private final Logger logger = LoggerFactory.getLogger(DiscordService.class);
     private final JDA JDA;
+    private final SpotifyAudioPipeline pipeline;
 
-    public DiscordService(Clientv2ServiceProperties properties) throws InterruptedException {
+    public DiscordService(Clientv2ServiceProperties properties, SpotifyAudioPipeline pipeline) throws InterruptedException {
+        this.pipeline = pipeline;
         JDABuilder builder = JDABuilder.create(properties.getDiscordToken(), EnumSet.of(GUILD_VOICE_STATES));
         builder.setAudioModuleConfig(new AudioModuleConfig().withDaveSessionFactory(new JDaveSessionFactory()));
 
@@ -102,16 +101,18 @@ public class DiscordService extends ListenerAdapter {
     }
 
     private void disconnectVoice(AudioManager audioManager) {
+        closeSendingHandler(audioManager);
         audioManager.closeAudioConnection();
+        this.checkNoListeners();
+    }
 
+    private void closeSendingHandler(AudioManager audioManager) {
         AudioSendHandler sendingHandler = audioManager.getSendingHandler();
 
-        if (sendingHandler instanceof AudioSource) {
-            ((AudioSource) sendingHandler).destroy();
+        if (sendingHandler instanceof SpotifyAudioSendHandler spotifyHandler) {
+            spotifyHandler.close();
             audioManager.setSendingHandler(null);
         }
-
-        this.checkNoListeners();
     }
 
     private void onLeaveCommand(@NotNull SlashCommandInteractionEvent event) {
@@ -132,6 +133,8 @@ public class DiscordService extends ListenerAdapter {
         AudioManager audioManager = guild.getAudioManager();
 
         if (!audioManager.isConnected()) {
+            closeSendingHandler(audioManager);
+            this.checkNoListeners();
             interactionHook.editOriginal("I am not currently in a voice channel!").queue();
             return;
         }
@@ -169,13 +172,14 @@ public class DiscordService extends ListenerAdapter {
         audioManager.setAutoReconnect(false);
         AudioChannelUnion channel = voiceState.getChannel();
 
+        SpotifyAudioSendHandler installedHandler = null;
         if (audioManager.getSendingHandler() == null) {
+            installedHandler = pipeline.broadcaster().subscribe();
             try {
-                audioManager.setSendingHandler(new AudioSource());
-            } catch (LineUnavailableException e) {
-                this.logger.error("Unable to create AudioSource", e);
-                interactionHook.editOriginal("An internal Error occured").queue();
-                return;
+                audioManager.setSendingHandler(installedHandler);
+            } catch (RuntimeException failure) {
+                closeFailedJoinHandler(audioManager, installedHandler);
+                throw failure;
             }
         }
 
@@ -183,7 +187,21 @@ public class DiscordService extends ListenerAdapter {
             audioManager.openAudioConnection(channel);
             interactionHook.editOriginal("Will do!").queue();
         } catch (InsufficientPermissionException insufficientPermissionException) {
+            closeFailedJoinHandler(audioManager, installedHandler);
             interactionHook.editOriginal("I dont have permissions to join your channel!").queue();
+        } catch (RuntimeException failure) {
+            closeFailedJoinHandler(audioManager, installedHandler);
+            throw failure;
+        }
+    }
+
+    private void closeFailedJoinHandler(AudioManager audioManager, SpotifyAudioSendHandler installedHandler) {
+        if (installedHandler == null) {
+            return;
+        }
+        installedHandler.close();
+        if (audioManager.getSendingHandler() == installedHandler) {
+            audioManager.setSendingHandler(null);
         }
     }
 
