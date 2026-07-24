@@ -51,9 +51,15 @@ public final class AudioPipelineState {
     }
 
     public boolean isReady() {
-        ReaderStatus status = readerStatus.get();
-        return latestOutputFrameNanos.get() != NO_FRAME
-                && status.state() == ReaderState.READING;
+        return readerStatus.get().ready();
+    }
+
+    public void resetForExpectedEof() {
+        readerStatus.set(new ReaderStatus(ReaderState.STOPPED, Optional.empty()));
+        latestSourceFrameNanos.set(NO_FRAME);
+        latestOutputFrameNanos.set(NO_FRAME);
+        schedulerLatenessMillis.set(0);
+        bufferedMillis.set(0);
     }
 
     public long getLatestFrameAgeMillis() {
@@ -147,6 +153,10 @@ public final class AudioPipelineState {
             if ((state == ReaderState.FAILED) != failure.isPresent()) {
                 throw new IllegalArgumentException("Only FAILED reader status has a failure reason");
             }
+        }
+
+        public boolean ready() {
+            return state == ReaderState.OPENING || state == ReaderState.READING;
         }
     }
 

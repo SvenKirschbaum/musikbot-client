@@ -82,8 +82,11 @@ public final class AudioPipelineTelemetry implements AutoCloseable {
                 .buildWithCallback(measurement -> measurement.record(state.isReady() ? 1 : 0));
     }
 
-    public void sourceFrame() {
-        sourceFrames.add(1);
+    public void sourceFrames(long count) {
+        if (count < 0) {
+            throw new IllegalArgumentException("count must not be negative");
+        }
+        sourceFrames.add(count);
     }
 
     public void outputFrame(Duration age) {

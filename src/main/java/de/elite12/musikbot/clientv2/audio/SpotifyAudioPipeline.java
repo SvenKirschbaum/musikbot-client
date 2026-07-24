@@ -30,10 +30,11 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
     private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(2);
     private static final int FILE_TYPE_MASK = 0170000;
     private static final int FIFO_TYPE = 0010000;
+    private static final String STARTUP_FAILURE_REASON = "Spotify PCM converter verification failed";
+    private static final String TERMINAL_FAILURE_REASON = "Spotify audio pipeline terminated unexpectedly";
 
     private final Path fifo;
     private final Duration retryDelay;
-    private final int historyFrames;
     private final SoftwareVolume volume;
     private final AudioPipelineState state;
     private final AudioPipelineTelemetry telemetry;
@@ -49,6 +50,7 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
 
     private volatile Thread worker;
     private volatile Throwable terminalFailure;
+    private volatile String terminalHealthReason;
 
     public SpotifyAudioPipeline(
             Clientv2ServiceProperties properties,
@@ -73,7 +75,7 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
         fifo = Objects.requireNonNull(properties.getSpotifyAudioFifo(), "spotifyAudioFifo");
         retryDelay = requirePositive(properties.getSpotifyAudioRetryDelay(), "spotifyAudioRetryDelay");
         Duration maxHistory = requirePositive(properties.getSpotifyAudioMaxHistory(), "spotifyAudioMaxHistory");
-        historyFrames = Math.min(MAX_HISTORY_FRAMES,
+        int historyFrames = Math.min(MAX_HISTORY_FRAMES,
                 Math.max(1, Math.toIntExact(maxHistory.toMillis() / FRAME_MILLIS)));
         this.volume = Objects.requireNonNull(volume, "volume");
         this.state = Objects.requireNonNull(state, "state");
@@ -101,8 +103,9 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
         try {
             verifier.run();
         } catch (RuntimeException | Error failure) {
+            terminalHealthReason = STARTUP_FAILURE_REASON;
             terminalFailure = failure;
-            state.failReadiness(failureMessage(failure));
+            state.failReadiness(STARTUP_FAILURE_REASON);
             running.set(false);
             return;
         }
@@ -120,10 +123,10 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
         Health.Builder health;
         Thread currentWorker = worker;
         if (terminalFailure != null) {
-            health = Health.down().withDetail("reason", failureMessage(terminalFailure));
+            health = Health.down().withDetail("reason", terminalHealthReason);
         } else if (currentWorker == null || !currentWorker.isAlive()) {
             health = Health.down().withDetail("reason", "Audio pipeline worker is not running");
-        } else if (status.state() == AudioPipelineState.ReaderState.FAILED) {
+        } else if (!status.ready()) {
             health = Health.down().withDetail("reason", status.failure().orElse("Audio pipeline failed"));
         } else {
             health = Health.up();
@@ -159,10 +162,7 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
                         + SHUTDOWN_TIMEOUT);
             }
         }
-        broadcaster.reset();
-        state.setBufferedMillis(0);
-        state.setSubscribers(broadcaster.subscriberCount());
-        state.setReaderState(AudioPipelineState.ReaderState.STOPPED);
+        resetAfterExpectedEof();
         if (closeFailure != null) {
             throw new IllegalStateException("Failed to close Spotify audio FIFO", closeFailure);
         }
@@ -212,8 +212,10 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
                         recover(failure, AudioPipelineTelemetry.RecoveryReason.CONVERSION_FAILURE);
                     }
                 } catch (RuntimeException | Error failure) {
+                    lastUnexpectedFailure.set(failure);
+                    terminalHealthReason = TERMINAL_FAILURE_REASON;
                     terminalFailure = failure;
-                    state.failReadiness(failureMessage(failure));
+                    state.failReadiness(TERMINAL_FAILURE_REASON);
                     break;
                 }
 
@@ -260,15 +262,17 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
         RealtimeFramePacer pacer = new RealtimeFramePacer(nanoTime);
         pacer.reset();
         byte[] frame = new byte[SpotifyPcmConverter.OUTPUT_FRAME_BYTES];
+        boolean expectedEof = false;
 
         try (SpotifyPcmConverter converter = new SpotifyPcmConverter(input)) {
             while (!managed || running.get()) {
                 long conversionStarted = nanoTime.getAsLong();
                 if (!converter.readFrame(frame)) {
+                    expectedEof = true;
                     break;
                 }
                 state.recordSourceFrame();
-                telemetry.sourceFrame();
+                telemetry.sourceFrames(1);
 
                 long framesToDrop = pacer.framesToDrop();
                 long latenessNanos = framesToDrop * RealtimeFramePacer.FRAME_NANOS;
@@ -276,8 +280,10 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
                 telemetry.schedulerLateness(Duration.ofNanos(latenessNanos));
                 if (framesToDrop > 0) {
                     long discarded = discardFrames(converter, framesToDrop, frame);
+                    telemetry.sourceFrames(discarded);
                     telemetry.dropped(discarded, AudioPipelineTelemetry.DropReason.CATCH_UP);
                     if (discarded < framesToDrop) {
+                        expectedEof = true;
                         break;
                     }
                     state.recordSourceFrame();
@@ -286,20 +292,24 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
                 telemetry.conversion(Duration.ofNanos(elapsedSince(conversionStarted)));
                 volume.apply(frame);
                 long frameAgeNanos = Math.max(0, nanoTime.getAsLong() - state.getLatestSourceFrameNanos());
-                state.recordOutputFrame();
-                completeRecovery();
                 broadcaster.publish(frame.clone());
+                state.recordOutputFrame();
                 int subscribers = broadcaster.subscriberCount();
-                long bufferedMillis = subscribers == 0 ? 0 : historyFrames * FRAME_MILLIS;
+                long bufferedMillis = broadcaster.maxSubscriberQueueDepth() * FRAME_MILLIS;
                 state.setSubscribers(subscribers);
                 state.setBufferedMillis(bufferedMillis);
                 telemetry.subscriberBuffer(Duration.ofMillis(bufferedMillis));
                 telemetry.outputFrame(Duration.ofNanos(frameAgeNanos));
+                completeRecovery();
                 park(Duration.ofNanos(pacer.nanosUntilNextFrame()));
             }
         } finally {
-            broadcaster.reset();
-            state.setBufferedMillis(0);
+            if (expectedEof) {
+                resetAfterExpectedEof();
+            } else {
+                broadcaster.reset();
+                state.setBufferedMillis(0);
+            }
         }
     }
 
@@ -332,6 +342,12 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
         if (pending != null) {
             pending.closeSuccess();
         }
+    }
+
+    private void resetAfterExpectedEof() {
+        broadcaster.reset();
+        state.resetForExpectedEof();
+        state.setSubscribers(broadcaster.subscriberCount());
     }
 
     private void verifyFifo() throws IOException {
@@ -402,11 +418,6 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
             throw new IllegalArgumentException(name + " must be positive");
         }
         return duration;
-    }
-
-    private static String failureMessage(Throwable failure) {
-        String message = failure.getMessage();
-        return message == null || message.isBlank() ? failure.getClass().getSimpleName() : message;
     }
 
     @FunctionalInterface

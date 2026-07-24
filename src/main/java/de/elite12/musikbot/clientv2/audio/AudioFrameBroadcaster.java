@@ -41,6 +41,13 @@ public final class AudioFrameBroadcaster {
         return subscribers.size();
     }
 
+    public int maxSubscriberQueueDepth() {
+        return subscribers.stream()
+                .mapToInt(SpotifyAudioSendHandler::queueDepth)
+                .max()
+                .orElse(0);
+    }
+
     void unsubscribe(SpotifyAudioSendHandler handler) {
         subscribers.remove(handler);
         handler.clear();

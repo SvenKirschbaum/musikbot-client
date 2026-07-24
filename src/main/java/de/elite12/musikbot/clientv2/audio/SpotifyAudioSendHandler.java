@@ -62,4 +62,8 @@ public final class SpotifyAudioSendHandler implements AudioSendHandler, AutoClos
     synchronized void clear() {
         frames.clear();
     }
+
+    synchronized int queueDepth() {
+        return frames.size();
+    }
 }

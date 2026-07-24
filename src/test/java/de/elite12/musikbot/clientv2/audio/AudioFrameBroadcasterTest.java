@@ -78,6 +78,26 @@ class AudioFrameBroadcasterTest {
 
         assertFalse(first.canProvide());
         assertFalse(second.canProvide());
+        assertEquals(0, broadcaster.maxSubscriberQueueDepth());
+    }
+
+    @Test
+    void reportsCurrentMaximumSubscriberQueueDepth() {
+        AudioFrameBroadcaster broadcaster = new AudioFrameBroadcaster(10, ignored -> {});
+        SpotifyAudioSendHandler slow = broadcaster.subscribe();
+        SpotifyAudioSendHandler current = broadcaster.subscribe();
+
+        broadcaster.publish(new byte[]{1});
+        current.provide20MsAudio();
+        broadcaster.publish(new byte[]{2});
+
+        assertEquals(2, broadcaster.maxSubscriberQueueDepth());
+        slow.provide20MsAudio();
+        assertEquals(1, broadcaster.maxSubscriberQueueDepth());
+        slow.close();
+        assertEquals(1, broadcaster.maxSubscriberQueueDepth());
+        current.provide20MsAudio();
+        assertEquals(0, broadcaster.maxSubscriberQueueDepth());
     }
 
     @Test

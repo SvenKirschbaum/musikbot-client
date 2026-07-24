@@ -30,6 +30,42 @@ class AudioPipelineStateTest {
     }
 
     @Test
+    void readinessMatchesValidatedOpeningReadingAndDownStates() {
+        AudioPipelineState state = new AudioPipelineState(() -> 0);
+
+        assertFalse(state.isReady());
+        state.setReaderState(AudioPipelineState.ReaderState.OPENING);
+        assertTrue(state.isReady());
+        state.setReaderState(AudioPipelineState.ReaderState.READING);
+        assertTrue(state.isReady());
+        state.setReaderState(AudioPipelineState.ReaderState.RETRYING);
+        assertFalse(state.isReady());
+        state.failReadiness("failed");
+        assertFalse(state.isReady());
+        state.setReaderState(AudioPipelineState.ReaderState.STOPPED);
+        assertFalse(state.isReady());
+    }
+
+    @Test
+    void expectedEofResetClearsEveryGenerationValueAndReadiness() {
+        AudioPipelineState state = new AudioPipelineState(() -> 123);
+        state.recordSourceFrame();
+        state.recordOutputFrame();
+        state.setSchedulerLatenessMillis(40);
+        state.setBufferedMillis(180);
+
+        state.resetForExpectedEof();
+
+        assertEquals(AudioPipelineState.ReaderState.STOPPED, state.getReaderState());
+        assertFalse(state.isReady());
+        assertEquals(Long.MIN_VALUE, state.getLatestSourceFrameNanos());
+        assertEquals(Long.MIN_VALUE, state.getLatestOutputFrameNanos());
+        assertEquals(0, state.getLatestFrameAgeMillis());
+        assertEquals(0, state.getSchedulerLatenessMillis());
+        assertEquals(0, state.getBufferedMillis());
+    }
+
+    @Test
     void validOutputMakesPipelineReadyAndRecordsMonotonicTimestamps() {
         AtomicLong now = new AtomicLong(Duration.ofSeconds(1).toNanos());
         AudioPipelineState state = new AudioPipelineState(now::get);
@@ -159,6 +195,7 @@ class AudioPipelineStateTest {
         try (AudioPipelineTelemetry telemetry = new AudioPipelineTelemetry(new AudioPipelineState(() -> 0))) {
             assertThrows(IllegalArgumentException.class,
                     () -> telemetry.schedulerLateness(Duration.ofMillis(-1)));
+            assertThrows(IllegalArgumentException.class, () -> telemetry.sourceFrames(-1));
         }
     }
 
