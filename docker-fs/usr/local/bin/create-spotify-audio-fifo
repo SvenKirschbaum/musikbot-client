@@ -4,10 +4,24 @@ set -eu
 install -d -m 0755 /run/musikbot
 fifo=/run/musikbot/spotify.pcm
 
-if [ -e "$fifo" ] && [ ! -p "$fifo" ]; then
-    echo "$fifo exists and is not a FIFO" >&2
+is_fifo() {
+    [ ! -L "$fifo" ] && [ -p "$fifo" ]
+}
+
+reject_path() {
+    echo "$fifo is not a non-symlink FIFO" >&2
     exit 1
+}
+
+if ! is_fifo; then
+    if [ -e "$fifo" ] || [ -L "$fifo" ]; then
+        reject_path
+    fi
+
+    if ! mkfifo -m 0600 "$fifo" 2>/dev/null && ! is_fifo; then
+        reject_path
+    fi
 fi
 
-[ -p "$fifo" ] || mkfifo -m 0600 "$fifo"
+is_fifo || reject_path
 chmod 0600 "$fifo"
