@@ -11,7 +11,6 @@ import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanKind;
 import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.api.trace.Tracer;
-import io.opentelemetry.context.Scope;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -34,7 +33,7 @@ public final class AudioPipelineTelemetry implements AutoCloseable {
     private final LongCounter conversionFailures;
     private final DoubleHistogram conversionDuration;
     private final DoubleHistogram frameAge;
-    private final DoubleHistogram schedulerDrift;
+    private final DoubleHistogram schedulerLateness;
     private final DoubleHistogram reopenDelay;
     private final DoubleHistogram subscriberBufferDuration;
     private final ObservableLongGauge bufferedDurationGauge;
@@ -56,7 +55,7 @@ public final class AudioPipelineTelemetry implements AutoCloseable {
 
         conversionDuration = histogram(meter, "spotify.audio.conversion.duration", "PCM conversion duration");
         frameAge = histogram(meter, "spotify.audio.frame.age", "Published frame age");
-        schedulerDrift = histogram(meter, "spotify.audio.scheduler.drift", "Frame scheduler drift");
+        schedulerLateness = histogram(meter, "spotify.audio.scheduler.lateness", "Frame scheduler lateness");
         reopenDelay = histogram(meter, "spotify.audio.fifo.reopen.delay", "FIFO reopen delay");
         subscriberBufferDuration = histogram(meter, "spotify.audio.subscriber.buffer.duration",
                 "Subscriber buffered duration");
@@ -117,8 +116,13 @@ public final class AudioPipelineTelemetry implements AutoCloseable {
         conversionDuration.record(milliseconds(duration));
     }
 
-    public void drift(Duration drift) {
-        schedulerDrift.record(milliseconds(drift));
+    /** Records how late frame processing ran relative to its monotonic deadline. */
+    public void schedulerLateness(Duration lateness) {
+        Objects.requireNonNull(lateness, "lateness");
+        if (lateness.isNegative()) {
+            throw new IllegalArgumentException("lateness must not be negative");
+        }
+        schedulerLateness.record(milliseconds(lateness));
     }
 
     public void subscriberBuffer(Duration duration) {
@@ -146,10 +150,36 @@ public final class AudioPipelineTelemetry implements AutoCloseable {
 
     @Override
     public void close() {
-        bufferedDurationGauge.close();
-        latestFrameAgeGauge.close();
-        subscribersGauge.close();
-        readyGauge.close();
+        closeAll(
+                bufferedDurationGauge::close,
+                latestFrameAgeGauge::close,
+                subscribersGauge::close,
+                readyGauge::close
+        );
+    }
+
+    static void closeAll(Runnable... cleanups) {
+        Throwable failure = null;
+        for (Runnable cleanup : cleanups) {
+            try {
+                cleanup.run();
+            } catch (Throwable exception) {
+                if (failure == null) {
+                    failure = exception;
+                } else if (failure != exception) {
+                    failure.addSuppressed(exception);
+                }
+            }
+        }
+        if (failure instanceof RuntimeException runtimeException) {
+            throw runtimeException;
+        }
+        if (failure instanceof Error error) {
+            throw error;
+        }
+        if (failure != null) {
+            throw new IllegalStateException("Gauge cleanup failed", failure);
+        }
     }
 
     private static LongCounter counter(Meter meter, String name, String description, String unit) {
@@ -209,12 +239,10 @@ public final class AudioPipelineTelemetry implements AutoCloseable {
     public static final class Operation {
 
         private final Span span;
-        private final Scope scope;
         private final AtomicBoolean closed = new AtomicBoolean();
 
         private Operation(Span span) {
             this.span = span;
-            scope = span.makeCurrent();
         }
 
         public void closeSuccess() {
@@ -222,7 +250,6 @@ public final class AudioPipelineTelemetry implements AutoCloseable {
         }
 
         public void closeFailure(Throwable error) {
-            Objects.requireNonNull(error, "error");
             finish(StatusCode.ERROR);
         }
 
@@ -233,11 +260,7 @@ public final class AudioPipelineTelemetry implements AutoCloseable {
             try {
                 span.setStatus(status);
             } finally {
-                try {
-                    scope.close();
-                } finally {
-                    span.end();
-                }
+                span.end();
             }
         }
     }

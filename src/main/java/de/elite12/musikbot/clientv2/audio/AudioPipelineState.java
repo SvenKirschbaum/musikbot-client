@@ -16,14 +16,15 @@ public final class AudioPipelineState {
     private static final long NO_FRAME = Long.MIN_VALUE;
 
     private final LongSupplier nanoTime;
-    private final AtomicReference<ReaderState> readerState = new AtomicReference<>(ReaderState.STOPPED);
+    private final AtomicReference<ReaderStatus> readerStatus = new AtomicReference<>(
+            new ReaderStatus(ReaderState.STOPPED, Optional.empty())
+    );
     private final AtomicLong generation = new AtomicLong();
     private final AtomicLong latestSourceFrameNanos = new AtomicLong(NO_FRAME);
     private final AtomicLong latestOutputFrameNanos = new AtomicLong(NO_FRAME);
     private final AtomicLong bufferedMillis = new AtomicLong();
-    private final AtomicLong driftMillis = new AtomicLong();
+    private final AtomicLong schedulerLatenessMillis = new AtomicLong();
     private final AtomicInteger subscribers = new AtomicInteger();
-    private final AtomicReference<String> readinessFailure = new AtomicReference<>();
 
     public AudioPipelineState() {
         this(System::nanoTime);
@@ -39,19 +40,20 @@ public final class AudioPipelineState {
 
     public void recordOutputFrame() {
         setLatestOutputFrameNanos(nanoTime.getAsLong());
-        readerState.set(ReaderState.READING);
-        readinessFailure.set(null);
+        readerStatus.set(new ReaderStatus(ReaderState.READING, Optional.empty()));
     }
 
     public void failReadiness(String reason) {
-        readinessFailure.set(Objects.requireNonNull(reason, "reason"));
-        readerState.set(ReaderState.FAILED);
+        readerStatus.set(new ReaderStatus(
+                ReaderState.FAILED,
+                Optional.of(Objects.requireNonNull(reason, "reason"))
+        ));
     }
 
     public boolean isReady() {
+        ReaderStatus status = readerStatus.get();
         return latestOutputFrameNanos.get() != NO_FRAME
-                && readerState.get() == ReaderState.READING
-                && readinessFailure.get() == null;
+                && status.state() == ReaderState.READING;
     }
 
     public long getLatestFrameAgeMillis() {
@@ -63,11 +65,19 @@ public final class AudioPipelineState {
     }
 
     public ReaderState getReaderState() {
-        return readerState.get();
+        return readerStatus.get().state();
     }
 
     public void setReaderState(ReaderState readerState) {
-        this.readerState.set(Objects.requireNonNull(readerState, "readerState"));
+        Objects.requireNonNull(readerState, "readerState");
+        if (readerState == ReaderState.FAILED) {
+            throw new IllegalArgumentException("Use failReadiness to publish a failure reason");
+        }
+        readerStatus.set(new ReaderStatus(readerState, Optional.empty()));
+    }
+
+    public ReaderStatus getReaderStatus() {
+        return readerStatus.get();
     }
 
     public long getGeneration() {
@@ -106,12 +116,15 @@ public final class AudioPipelineState {
         this.bufferedMillis.set(bufferedMillis);
     }
 
-    public long getDriftMillis() {
-        return driftMillis.get();
+    public long getSchedulerLatenessMillis() {
+        return schedulerLatenessMillis.get();
     }
 
-    public void setDriftMillis(long driftMillis) {
-        this.driftMillis.set(driftMillis);
+    public void setSchedulerLatenessMillis(long schedulerLatenessMillis) {
+        if (schedulerLatenessMillis < 0) {
+            throw new IllegalArgumentException("schedulerLatenessMillis must not be negative");
+        }
+        this.schedulerLatenessMillis.set(schedulerLatenessMillis);
     }
 
     public int getSubscribers() {
@@ -123,7 +136,18 @@ public final class AudioPipelineState {
     }
 
     public Optional<String> getReadinessFailure() {
-        return Optional.ofNullable(readinessFailure.get());
+        return readerStatus.get().failure();
+    }
+
+    public record ReaderStatus(ReaderState state, Optional<String> failure) {
+
+        public ReaderStatus {
+            Objects.requireNonNull(state, "state");
+            Objects.requireNonNull(failure, "failure");
+            if ((state == ReaderState.FAILED) != failure.isPresent()) {
+                throw new IllegalArgumentException("Only FAILED reader status has a failure reason");
+            }
+        }
     }
 
     public enum ReaderState {
