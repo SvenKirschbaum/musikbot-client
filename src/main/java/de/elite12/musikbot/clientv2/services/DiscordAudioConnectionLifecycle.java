@@ -54,6 +54,11 @@ final class DiscordAudioConnectionLifecycle implements ConnectionListener {
         }
     }
 
+    synchronized void detach() {
+        release(currentAttempt);
+        state = State.IDLE;
+    }
+
     void disconnect() {
         boolean completed = false;
         synchronized (this) {
@@ -94,7 +99,9 @@ final class DiscordAudioConnectionLifecycle implements ConnectionListener {
     public void onStatusChange(@NotNull ConnectionStatus status) {
         boolean completed = false;
         synchronized (this) {
-            if (status == ConnectionStatus.CONNECTED) {
+            if (status == ConnectionStatus.AUDIO_REGION_CHANGE) {
+                return;
+            } else if (status == ConnectionStatus.CONNECTED) {
                 if (state == State.OPENING) {
                     state = State.CONNECTED;
                 }

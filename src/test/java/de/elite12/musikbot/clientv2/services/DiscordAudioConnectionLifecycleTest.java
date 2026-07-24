@@ -97,6 +97,30 @@ class DiscordAudioConnectionLifecycleTest {
     }
 
     @Test
+    void audioRegionChangePreservesAttemptThroughReplacementConnection() {
+        assertTrue(startJoin(() -> connection.status = ConnectionStatus.CONNECTING_AWAITING_ENDPOINT));
+        connection.status = ConnectionStatus.CONNECTED;
+        lifecycle.onStatusChange(ConnectionStatus.CONNECTED);
+        AudioSendHandler ownedHandler = connection.sendingHandler;
+
+        connection.status = ConnectionStatus.NOT_CONNECTED;
+        lifecycle.onStatusChange(ConnectionStatus.AUDIO_REGION_CHANGE);
+
+        assertSame(ownedHandler, connection.sendingHandler);
+        assertEquals(1, broadcaster.subscriberCount());
+        assertEquals(0, disconnectCompletions.get());
+        assertNull(lifecycle.beginJoin());
+
+        connection.status = ConnectionStatus.CONNECTED;
+        lifecycle.onStatusChange(ConnectionStatus.CONNECTED);
+
+        assertSame(ownedHandler, connection.sendingHandler);
+        assertEquals(1, broadcaster.subscriberCount());
+        assertEquals(0, disconnectCompletions.get());
+        assertNull(lifecycle.beginJoin());
+    }
+
+    @Test
     void disconnectCompletionIsReportedOnlyAfterTerminalStatus() {
         assertTrue(startJoin(() -> connection.status = ConnectionStatus.CONNECTING_AWAITING_ENDPOINT));
         connection.status = ConnectionStatus.CONNECTED;

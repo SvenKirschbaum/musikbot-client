@@ -17,6 +17,7 @@ import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.GuildVoiceState;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.channel.unions.AudioChannelUnion;
+import net.dv8tion.jda.api.events.guild.GuildLeaveEvent;
 import net.dv8tion.jda.api.events.guild.voice.GuildVoiceUpdateEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.exceptions.InsufficientPermissionException;
@@ -33,9 +34,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import java.util.EnumSet;
-import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static net.dv8tion.jda.api.requests.GatewayIntent.GUILD_VOICE_STATES;
 
@@ -52,10 +51,14 @@ public class DiscordService extends ListenerAdapter {
 
     private final JDA JDA;
     private final SpotifyAudioPipeline pipeline;
-    private final Map<Long, DiscordAudioConnectionLifecycle> audioLifecycles = new ConcurrentHashMap<>();
+    private final DiscordAudioConnectionLifecycleRegistry<AudioManager> audioLifecycles;
 
     public DiscordService(Clientv2ServiceProperties properties, SpotifyAudioPipeline pipeline) throws InterruptedException {
         this.pipeline = pipeline;
+        this.audioLifecycles = new DiscordAudioConnectionLifecycleRegistry<>(
+                this::createLifecycle,
+                this::detachLifecycle
+        );
         JDABuilder builder = JDABuilder.create(properties.getDiscordToken(), EnumSet.of(GUILD_VOICE_STATES));
         builder.setAudioModuleConfig(new AudioModuleConfig().withDaveSessionFactory(new JDaveSessionFactory()));
 
@@ -101,6 +104,11 @@ public class DiscordService extends ListenerAdapter {
         if (event.getMember().getIdLong() == this.JDA.getSelfUser().getIdLong() && event.getNewValue() == null) {
             lifecycleFor(event.getGuild().getAudioManager()).disconnected();
         }
+    }
+
+    @Override
+    public void onGuildLeave(@NotNull GuildLeaveEvent event) {
+        audioLifecycles.remove(event.getGuild().getIdLong());
     }
 
     private void onLeaveCommand(@NotNull SlashCommandInteractionEvent event) {
@@ -180,35 +188,44 @@ public class DiscordService extends ListenerAdapter {
     }
 
     private DiscordAudioConnectionLifecycle lifecycleFor(AudioManager audioManager) {
-        return audioLifecycles.computeIfAbsent(audioManager.getGuild().getIdLong(), ignored -> {
-            DiscordAudioConnectionLifecycle lifecycle = new DiscordAudioConnectionLifecycle(
-                    pipeline.broadcaster(),
-                    new DiscordAudioConnectionLifecycle.Connection() {
-                        @Override
-                        public ConnectionStatus status() {
-                            return audioManager.getConnectionStatus();
-                        }
+        return audioLifecycles.lifecycleFor(audioManager.getGuild().getIdLong(), audioManager);
+    }
 
-                        @Override
-                        public AudioSendHandler sendingHandler() {
-                            return audioManager.getSendingHandler();
-                        }
+    private DiscordAudioConnectionLifecycle createLifecycle(AudioManager audioManager) {
+        DiscordAudioConnectionLifecycle lifecycle = new DiscordAudioConnectionLifecycle(
+                pipeline.broadcaster(),
+                new DiscordAudioConnectionLifecycle.Connection() {
+                    @Override
+                    public ConnectionStatus status() {
+                        return audioManager.getConnectionStatus();
+                    }
 
-                        @Override
-                        public void setSendingHandler(AudioSendHandler handler) {
-                            audioManager.setSendingHandler(handler);
-                        }
+                    @Override
+                    public AudioSendHandler sendingHandler() {
+                        return audioManager.getSendingHandler();
+                    }
 
-                        @Override
-                        public void close() {
-                            audioManager.closeAudioConnection();
-                        }
-                    },
-                    this::checkNoListeners
-            );
-            audioManager.setConnectionListener(lifecycle);
-            return lifecycle;
-        });
+                    @Override
+                    public void setSendingHandler(AudioSendHandler handler) {
+                        audioManager.setSendingHandler(handler);
+                    }
+
+                    @Override
+                    public void close() {
+                        audioManager.closeAudioConnection();
+                    }
+                },
+                this::checkNoListeners
+        );
+        audioManager.setConnectionListener(lifecycle);
+        return lifecycle;
+    }
+
+    private void detachLifecycle(AudioManager audioManager, DiscordAudioConnectionLifecycle lifecycle) {
+        if (audioManager.getConnectionListener() == lifecycle) {
+            audioManager.setConnectionListener(null);
+        }
+        lifecycle.detach();
     }
 
     private void checkNoListeners() {
