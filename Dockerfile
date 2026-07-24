@@ -11,12 +11,13 @@ COPY src/ ./src/
 RUN --mount=type=secret,id=maven_settings,target=/root/.m2/settings.xml \
     mvn -s /root/.m2/settings.xml -f ./pom.xml package
 RUN "$JAVA_HOME/bin/jlink" \
-    --add-modules java.se,jdk.crypto.ec,jdk.unsupported,jdk.zipfs \
+    --add-modules java.se,jdk.crypto.ec,jdk.net,jdk.unsupported,jdk.zipfs \
     --strip-debug \
     --no-header-files \
     --no-man-pages \
     --compress=zip-6 \
     --output /opt/corretto-jre
+RUN /opt/corretto-jre/bin/java --describe-module jdk.net
 
 #BUILD SPOTIFYD
 FROM rust:1.97.1-bookworm@sha256:77fac8b98f9f46062bb680b6d25d5bcaabfc400143952ebc572e924bcbedc3fa AS build_spotifyd
