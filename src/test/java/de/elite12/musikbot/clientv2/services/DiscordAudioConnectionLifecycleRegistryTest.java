@@ -19,16 +19,17 @@ class DiscordAudioConnectionLifecycleRegistryTest {
     void managerReplacementDetachesOldBindingAndGuildRemovalDetachesCurrentBinding() {
         AudioFrameBroadcaster broadcaster = new AudioFrameBroadcaster(2, ignored -> {});
         AtomicInteger detachments = new AtomicInteger();
+        AtomicInteger disconnectCompletions = new AtomicInteger();
         DiscordAudioConnectionLifecycleRegistry<FakeManager> registry =
                 new DiscordAudioConnectionLifecycleRegistry<>(
                         manager -> new DiscordAudioConnectionLifecycle(
                                 broadcaster,
                                 manager.connection,
-                                () -> {}
+                                disconnectCompletions::incrementAndGet
                         ),
-                        (manager, lifecycle) -> {
+                        (manager, lifecycle, completeDisconnect) -> {
                             detachments.incrementAndGet();
-                            lifecycle.detach();
+                            lifecycle.detach(completeDisconnect);
                         }
                 );
         FakeManager firstManager = new FakeManager();
@@ -43,11 +44,20 @@ class DiscordAudioConnectionLifecycleRegistryTest {
 
         assertNotSame(first, replacement);
         assertEquals(1, detachments.get());
+        assertEquals(0, disconnectCompletions.get());
         assertNull(firstManager.connection.sendingHandler);
         assertEquals(0, broadcaster.subscriberCount());
 
+        assertNotNull(replacement.beginJoin());
         registry.remove(1L);
         assertEquals(2, detachments.get());
+        assertEquals(1, disconnectCompletions.get());
+        assertEquals(0, broadcaster.subscriberCount());
+
+        registry.remove(1L);
+        replacement.onStatusChange(ConnectionStatus.NOT_CONNECTED);
+        replacement.disconnected();
+        assertEquals(1, disconnectCompletions.get());
     }
 
     private static final class FakeManager {

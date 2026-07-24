@@ -2,18 +2,17 @@ package de.elite12.musikbot.clientv2.services;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 final class DiscordAudioConnectionLifecycleRegistry<M> {
 
     private final Map<Long, Binding> bindings = new HashMap<>();
     private final Function<M, DiscordAudioConnectionLifecycle> factory;
-    private final BiConsumer<M, DiscordAudioConnectionLifecycle> detacher;
+    private final Detacher<M> detacher;
 
     DiscordAudioConnectionLifecycleRegistry(
             Function<M, DiscordAudioConnectionLifecycle> factory,
-            BiConsumer<M, DiscordAudioConnectionLifecycle> detacher
+            Detacher<M> detacher
     ) {
         this.factory = factory;
         this.detacher = detacher;
@@ -26,7 +25,7 @@ final class DiscordAudioConnectionLifecycleRegistry<M> {
         }
         if (binding != null) {
             bindings.remove(guildId);
-            detacher.accept(binding.manager, binding.lifecycle);
+            detacher.detach(binding.manager, binding.lifecycle, false);
         }
 
         DiscordAudioConnectionLifecycle lifecycle = factory.apply(manager);
@@ -39,7 +38,12 @@ final class DiscordAudioConnectionLifecycleRegistry<M> {
         if (binding == null) {
             return;
         }
-        detacher.accept(binding.manager, binding.lifecycle);
+        detacher.detach(binding.manager, binding.lifecycle, true);
+    }
+
+    @FunctionalInterface
+    interface Detacher<M> {
+        void detach(M manager, DiscordAudioConnectionLifecycle lifecycle, boolean completeDisconnect);
     }
 
     private final class Binding {

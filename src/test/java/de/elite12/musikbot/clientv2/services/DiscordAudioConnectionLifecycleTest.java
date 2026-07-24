@@ -7,6 +7,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -140,18 +144,94 @@ class DiscordAudioConnectionLifecycleTest {
         assertEquals(1, disconnectCompletions.get());
     }
 
+    @Test
+    void disconnectBetweenBeginAndOpenPreventsStaleOpen() throws Exception {
+        CountDownLatch attemptCreated = new CountDownLatch(1);
+        CountDownLatch allowOpen = new CountDownLatch(1);
+        AtomicInteger opens = new AtomicInteger();
+
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            Future<Boolean> opened = executor.submit(() -> {
+                DiscordAudioConnectionLifecycle.JoinAttempt attempt = lifecycle.beginJoin();
+                attemptCreated.countDown();
+                await(allowOpen);
+                return lifecycle.open(attempt, opens::incrementAndGet);
+            });
+
+            assertTrue(attemptCreated.await(5, TimeUnit.SECONDS));
+            lifecycle.disconnect();
+            allowOpen.countDown();
+
+            assertFalse(opened.get());
+        }
+        assertEquals(0, opens.get());
+        assertEquals(0, broadcaster.subscriberCount());
+        assertEquals(1, connection.closeCalls);
+    }
+
+    @Test
+    void detachBetweenBeginAndOpenPermanentlyRejectsStaleLifecycle() throws Exception {
+        CountDownLatch attemptCreated = new CountDownLatch(1);
+        CountDownLatch allowOpen = new CountDownLatch(1);
+        AtomicInteger opens = new AtomicInteger();
+
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            Future<Boolean> opened = executor.submit(() -> {
+                DiscordAudioConnectionLifecycle.JoinAttempt attempt = lifecycle.beginJoin();
+                attemptCreated.countDown();
+                await(allowOpen);
+                return lifecycle.open(attempt, opens::incrementAndGet);
+            });
+
+            assertTrue(attemptCreated.await(5, TimeUnit.SECONDS));
+            lifecycle.detach(false);
+            allowOpen.countDown();
+
+            assertFalse(opened.get());
+        }
+
+        assertEquals(0, opens.get());
+        assertNull(lifecycle.beginJoin());
+        lifecycle.disconnect();
+        lifecycle.disconnected();
+        lifecycle.onStatusChange(ConnectionStatus.NOT_CONNECTED);
+        assertEquals(0, disconnectCompletions.get());
+        assertEquals(0, broadcaster.subscriberCount());
+    }
+
+    @Test
+    void openAllowsReentrantStatusCallback() {
+        AtomicInteger invalidOpens = new AtomicInteger();
+        assertFalse(lifecycle.open(null, invalidOpens::incrementAndGet));
+        assertEquals(0, invalidOpens.get());
+
+        DiscordAudioConnectionLifecycle.JoinAttempt attempt = lifecycle.beginJoin();
+
+        assertTrue(lifecycle.open(attempt, () -> {
+            connection.status = ConnectionStatus.CONNECTED;
+            lifecycle.onStatusChange(ConnectionStatus.CONNECTED);
+        }));
+
+        assertFalse(lifecycle.open(attempt, invalidOpens::incrementAndGet));
+        assertEquals(0, invalidOpens.get());
+        assertEquals(1, broadcaster.subscriberCount());
+        assertEquals(0, disconnectCompletions.get());
+    }
+
     private boolean startJoin(Runnable openConnection) {
         DiscordAudioConnectionLifecycle.JoinAttempt attempt = lifecycle.beginJoin();
-        if (attempt == null) {
-            return false;
-        }
+        return attempt != null && lifecycle.open(attempt, openConnection);
+    }
+
+    private static void await(CountDownLatch latch) {
         try {
-            openConnection.run();
-        } catch (RuntimeException failure) {
-            lifecycle.openFailed(attempt);
-            throw failure;
+            if (!latch.await(5, TimeUnit.SECONDS)) {
+                throw new AssertionError("Timed out waiting for test latch");
+            }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError("Interrupted while waiting for test latch", interrupted);
         }
-        return true;
     }
 
     private static final class FakeConnection implements DiscordAudioConnectionLifecycle.Connection {

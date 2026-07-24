@@ -173,15 +173,19 @@ public class DiscordService extends ListenerAdapter {
             return;
         }
 
+        boolean opened;
         try {
-            audioManager.openAudioConnection(channel);
+            opened = lifecycle.open(attempt, () -> audioManager.openAudioConnection(channel));
         } catch (InsufficientPermissionException insufficientPermissionException) {
-            lifecycle.openFailed(attempt);
             interactionHook.editOriginal("I dont have permissions to join your channel!").queue();
             return;
         } catch (RuntimeException failure) {
-            lifecycle.openFailed(attempt);
             throw failure;
+        }
+
+        if (!opened) {
+            interactionHook.editOriginal("I am already connected or connecting to a voice channel!").queue();
+            return;
         }
 
         interactionHook.editOriginal("Will do!").queue();
@@ -221,11 +225,15 @@ public class DiscordService extends ListenerAdapter {
         return lifecycle;
     }
 
-    private void detachLifecycle(AudioManager audioManager, DiscordAudioConnectionLifecycle lifecycle) {
+    private void detachLifecycle(
+            AudioManager audioManager,
+            DiscordAudioConnectionLifecycle lifecycle,
+            boolean completeDisconnect
+    ) {
         if (audioManager.getConnectionListener() == lifecycle) {
             audioManager.setConnectionListener(null);
         }
-        lifecycle.detach();
+        lifecycle.detach(completeDisconnect);
     }
 
     private void checkNoListeners() {

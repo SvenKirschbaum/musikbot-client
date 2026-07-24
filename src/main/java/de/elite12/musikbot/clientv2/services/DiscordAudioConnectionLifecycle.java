@@ -15,6 +15,7 @@ final class DiscordAudioConnectionLifecycle implements ConnectionListener {
 
     private State state = State.IDLE;
     private JoinAttempt currentAttempt;
+    private boolean disconnectCompletionReported;
 
     DiscordAudioConnectionLifecycle(
             AudioFrameBroadcaster broadcaster,
@@ -36,6 +37,7 @@ final class DiscordAudioConnectionLifecycle implements ConnectionListener {
         SpotifyAudioSendHandler handler = broadcaster.subscribe();
         JoinAttempt attempt = new JoinAttempt(handler);
         currentAttempt = attempt;
+        disconnectCompletionReported = false;
         try {
             connection.setSendingHandler(handler);
         } catch (RuntimeException failure) {
@@ -47,26 +49,49 @@ final class DiscordAudioConnectionLifecycle implements ConnectionListener {
         return attempt;
     }
 
-    synchronized void openFailed(JoinAttempt attempt) {
-        if (currentAttempt == attempt) {
-            release(attempt);
-            state = State.IDLE;
+    synchronized boolean open(JoinAttempt attempt, Runnable openConnection) {
+        if (attempt == null || attempt.opened || state == State.DETACHED || currentAttempt != attempt) {
+            return false;
         }
+        attempt.opened = true;
+        try {
+            openConnection.run();
+        } catch (RuntimeException failure) {
+            if (currentAttempt == attempt && state != State.DETACHED) {
+                release(attempt);
+                state = State.IDLE;
+            }
+            throw failure;
+        }
+        return state != State.DETACHED && currentAttempt == attempt;
     }
 
-    synchronized void detach() {
-        release(currentAttempt);
-        state = State.IDLE;
+    void detach(boolean completeDisconnect) {
+        boolean completed = false;
+        synchronized (this) {
+            if (state == State.DETACHED) {
+                return;
+            }
+            boolean active = state != State.IDLE || currentAttempt != null;
+            release(currentAttempt);
+            state = State.DETACHED;
+            if (completeDisconnect && active) {
+                completed = markDisconnectCompleteLocked();
+            }
+        }
+        if (completed) {
+            disconnectComplete.run();
+        }
     }
 
     void disconnect() {
         boolean completed = false;
         synchronized (this) {
-            if (state == State.CLOSING) {
+            if (state == State.CLOSING || state == State.DETACHED) {
                 return;
             }
             if (state == State.IDLE && connection.status() == ConnectionStatus.NOT_CONNECTED) {
-                completed = true;
+                completed = markDisconnectCompleteLocked();
             } else {
                 state = State.CLOSING;
                 release(currentAttempt);
@@ -81,6 +106,9 @@ final class DiscordAudioConnectionLifecycle implements ConnectionListener {
     void disconnected() {
         boolean completed;
         synchronized (this) {
+            if (state == State.DETACHED) {
+                return;
+            }
             if (connection.status() != ConnectionStatus.NOT_CONNECTED) {
                 if (state != State.IDLE) {
                     state = State.CLOSING;
@@ -99,7 +127,7 @@ final class DiscordAudioConnectionLifecycle implements ConnectionListener {
     public void onStatusChange(@NotNull ConnectionStatus status) {
         boolean completed = false;
         synchronized (this) {
-            if (status == ConnectionStatus.AUDIO_REGION_CHANGE) {
+            if (state == State.DETACHED || status == ConnectionStatus.AUDIO_REGION_CHANGE) {
                 return;
             } else if (status == ConnectionStatus.CONNECTED) {
                 if (state == State.OPENING) {
@@ -118,9 +146,17 @@ final class DiscordAudioConnectionLifecycle implements ConnectionListener {
         if (state != State.IDLE || currentAttempt != null) {
             release(currentAttempt);
             state = State.IDLE;
-            return true;
+            return markDisconnectCompleteLocked();
         }
         return false;
+    }
+
+    private boolean markDisconnectCompleteLocked() {
+        if (disconnectCompletionReported) {
+            return false;
+        }
+        disconnectCompletionReported = true;
+        return true;
     }
 
     private void release(JoinAttempt attempt) {
@@ -139,6 +175,7 @@ final class DiscordAudioConnectionLifecycle implements ConnectionListener {
 
     static final class JoinAttempt {
         private final SpotifyAudioSendHandler handler;
+        private boolean opened;
 
         private JoinAttempt(SpotifyAudioSendHandler handler) {
             this.handler = handler;
@@ -159,6 +196,7 @@ final class DiscordAudioConnectionLifecycle implements ConnectionListener {
         IDLE,
         OPENING,
         CONNECTED,
-        CLOSING
+        CLOSING,
+        DETACHED
     }
 }
