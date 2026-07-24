@@ -24,7 +24,7 @@ import java.util.regex.Pattern;
 @ConditionalOnProperty(
         value = "teamspeak.enabled",
         havingValue = "true",
-        matchIfMissing = true
+        matchIfMissing = false
 )
 public class TeamspeakService{
 
