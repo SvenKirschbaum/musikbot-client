@@ -3,69 +3,51 @@
 #BUILD APP
 FROM maven:3.9.16-amazoncorretto-25@sha256:4de04d5fe425efd2a5c21ea6c3c53f9f2c4c1381f1d7890d203d237c83fbc816 AS build_app
 WORKDIR /usr/src/app
+RUN dnf install -y binutils && dnf clean all
 COPY pom.xml .
 RUN --mount=type=secret,id=maven_settings,target=/root/.m2/settings.xml \
     mvn -s /root/.m2/settings.xml dependency:go-offline
 COPY src/ ./src/
 RUN --mount=type=secret,id=maven_settings,target=/root/.m2/settings.xml \
     mvn -s /root/.m2/settings.xml -f ./pom.xml package
+RUN "$JAVA_HOME/bin/jlink" \
+    --add-modules java.se,jdk.crypto.ec,jdk.unsupported,jdk.zipfs \
+    --strip-debug \
+    --no-header-files \
+    --no-man-pages \
+    --compress=zip-6 \
+    --output /opt/corretto-jre
 
 #BUILD SPOTIFYD
 FROM rust:1.97.1-bookworm@sha256:77fac8b98f9f46062bb680b6d25d5bcaabfc400143952ebc572e924bcbedc3fa AS build_spotifyd
-RUN apt-get update && apt-get install -y libasound2-dev libssl-dev libpulse-dev libdbus-1-dev cmake libclang-dev
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends libasound2-dev libssl-dev libpulse-dev libdbus-1-dev cmake libclang-dev \
+ && rm -rf /var/lib/apt/lists/*
 RUN git clone https://github.com/Spotifyd/spotifyd.git /usr/src/spotifyd && \
     git -C /usr/src/spotifyd fetch origin refs/pull/1374/head:tmp && \
     git -C /usr/src/spotifyd checkout tmp
 WORKDIR /usr/src/spotifyd
 RUN cargo build --release --no-default-features --features pulseaudio_backend
 
-#PACKAGE
+# PACKAGE DISCORD CLIENT
 FROM debian:13.6-slim@sha256:020c0d20b9880058cbe785a9db107156c3c75c2ac944a6aa7ab59f2add76a7bd
-
-ADD https://files.teamspeak-services.com/releases/client/3.5.6/TeamSpeak3-Client-linux_amd64-3.5.6.run /usr/local/teamspeak/install.run
-ADD https://apt.corretto.aws/corretto.key /tmp/corretto.key
 
 RUN \
     apt-get update \
- && apt-get install -y gnupg2 ca-certificates \
- && gpg --dearmor -o /usr/share/keyrings/corretto-keyring.gpg /tmp/corretto.key \
- && (echo "deb [signed-by=/usr/share/keyrings/corretto-keyring.gpg] https://apt.corretto.aws stable main" | tee /etc/apt/sources.list.d/corretto.list) \
- && apt-get update \
- && apt-get install -y \
-    curl \
-    java-25-amazon-corretto-jdk \
+ && apt-get install -y --no-install-recommends \
+    ca-certificates \
     libasound2 \
     libdbus-1-3 \
-    libegl1 \
-    libfontconfig1 \
-    libfreetype6 \
-    libgl1 \
-    libglib2.0-0 \
-    libnss3 \
-    libpci3 \
-    libxcomposite1 \
-    libxcursor1 \
-    libxi6 \
-    libxkbcommon0 \
-    libxslt1.1 \
-    libxss1 \
-    libxtst6 \
     pulseaudio \
     supervisor \
-    vlc \
-    xvfb \
- && rm -rf /var/lib/apt/lists/* \
- && rm -f /usr/lib/x86_64-linux-gnu/vlc/lua/playlist/youtube.luac \
- && mkdir -p /usr/local/teamspeak \
- && chmod +x /usr/local/teamspeak/install.run \
- && echo -ne "\ny" | (cd /usr/local/teamspeak/ && ./install.run)
+ && rm -rf /var/lib/apt/lists/*
 
-COPY ./docker-fs /
+COPY ./docker-fs/etc /etc
 
-ENV ENABLE_TEAMSPEAK false
-ENV TS3SERVER ""
-ENV TS3_APIKEY M2I6-MKSK-OCHP-JR0T-CY8L-T3H3
+ENV JAVA_HOME=/opt/corretto
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
+COPY --from=build_app /opt/corretto-jre /opt/corretto
 COPY --from=build_app /usr/src/app/target/clientv2-0.0.1-SNAPSHOT.jar /usr/local/musikbot/musikbot.jar
 COPY --from=build_spotifyd /usr/src/spotifyd/target/release/spotifyd /usr/local/spotifyd/spotifyd
 ENTRYPOINT ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

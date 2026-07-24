@@ -1,0 +1,44 @@
+# syntax=docker/dockerfile:1.25@sha256:0adf442eae370b6087e08edc7c50b552d80ddf261576f4ebd6421006b2461f12
+
+ARG DISCORD_IMAGE=musikbot-client:discord-only
+FROM ${DISCORD_IMAGE}
+
+ARG TEAMSPEAK_VERSION=3.5.6
+ARG TEAMSPEAK_SHA256=efbefd4a6c845974563d874f8d46eb8f7ea2919d1f444f9b780357d256884a42
+
+RUN \
+    apt-get update \
+ && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    libegl1 \
+    libfontconfig1 \
+    libfreetype6 \
+    libgl1 \
+    libglib2.0-0 \
+    libnss3 \
+    libpci3 \
+    libxcomposite1 \
+    libxcursor1 \
+    libxdamage1 \
+    libxi6 \
+    libxkbcommon0 \
+    libxslt1.1 \
+    libxss1 \
+    libxtst6 \
+    xvfb \
+ && mkdir -p /usr/local/teamspeak \
+ && curl -fsSL "https://files.teamspeak-services.com/releases/client/${TEAMSPEAK_VERSION}/TeamSpeak3-Client-linux_amd64-${TEAMSPEAK_VERSION}.run" -o /usr/local/teamspeak/install.run \
+ && echo "${TEAMSPEAK_SHA256}  /usr/local/teamspeak/install.run" | sha256sum -c - \
+ && chmod +x /usr/local/teamspeak/install.run \
+ && echo -ne "\ny" | (cd /usr/local/teamspeak && ./install.run) \
+ && rm -f /usr/local/teamspeak/install.run \
+ && apt-get purge -y --auto-remove curl \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY ./docker-fs/root/.ts3client /root/.ts3client
+COPY ./docker-fs-teamspeak/etc/supervisor/conf.d/teamspeak.conf /etc/supervisor/conf.d/teamspeak.conf
+
+ENV TEAMSPEAK_ENABLED=true
+ENV TS3SERVER=""
+ENV TS3_APIKEY=M2I6-MKSK-OCHP-JR0T-CY8L-T3H3

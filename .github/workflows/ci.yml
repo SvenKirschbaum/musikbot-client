@@ -79,6 +79,7 @@ jobs:
           {
             echo "version=${version}"
             echo "primary_tag=${image_ref}:v${version}"
+            echo "teamspeak_tag=${image_ref}:v${version}-teamspeak"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Build Docker image
@@ -90,12 +91,31 @@ jobs:
           push: false
           secret-files: |
             maven_settings=${{ runner.temp }}/settings.xml
-          tags: ${{ steps.meta.outputs.primary_tag }}
+          tags: |
+            ${{ steps.meta.outputs.primary_tag }}
+            musikbot-client:discord-base
+
+      - name: Build TeamSpeak Docker image
+        run: |
+          docker build \
+            --pull=false \
+            --file Dockerfile.teamspeak \
+            --build-arg "DISCORD_IMAGE=musikbot-client:discord-base" \
+            --tag "${{ steps.meta.outputs.teamspeak_tag }}" \
+            .
 
       - name: Scan Docker image with Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ steps.meta.outputs.primary_tag }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: 0
+
+      - name: Scan TeamSpeak Docker image with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.meta.outputs.teamspeak_tag }}
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: 0
@@ -110,7 +130,9 @@ jobs:
 
       - name: Push Docker image
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
-        run: docker push "${{ steps.meta.outputs.primary_tag }}"
+        run: |
+          docker push "${{ steps.meta.outputs.primary_tag }}"
+          docker push "${{ steps.meta.outputs.teamspeak_tag }}"
 
       - name: Trigger Flux image scans
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
