@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+install -d -m 0755 /run/musikbot
+fifo=/run/musikbot/spotify.pcm
+
+if [ -e "$fifo" ] && [ ! -p "$fifo" ]; then
+    echo "$fifo exists and is not a FIFO" >&2
+    exit 1
+fi
+
+[ -p "$fifo" ] || mkfifo -m 0600 "$fifo"
+chmod 0600 "$fifo"
