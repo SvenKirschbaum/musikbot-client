@@ -6,6 +6,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+import java.nio.file.Path;
+import java.time.Duration;
+
 /**
  * Musikbot Configuration
  */
@@ -45,6 +48,12 @@ public class Clientv2ServiceProperties {
 	 * Spotify Device Name
 	 */
 	private String spotifyDeviceName;
+
+	private Path spotifyAudioFifo = Path.of("/run/musikbot/spotify.pcm");
+
+	private Duration spotifyAudioRetryDelay = Duration.ofMillis(250);
+
+	private Duration spotifyAudioMaxHistory = Duration.ofMillis(200);
 
 	/**
      * API key used to connect via clientquery
