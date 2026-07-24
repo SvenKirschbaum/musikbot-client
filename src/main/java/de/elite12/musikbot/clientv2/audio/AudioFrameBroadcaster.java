@@ -42,10 +42,11 @@ public final class AudioFrameBroadcaster {
     }
 
     public int maxSubscriberQueueDepth() {
-        return subscribers.stream()
-                .mapToInt(SpotifyAudioSendHandler::queueDepth)
-                .max()
-                .orElse(0);
+        int maximum = 0;
+        for (SpotifyAudioSendHandler subscriber : subscribers) {
+            maximum = Math.max(maximum, subscriber.queueDepth());
+        }
+        return maximum;
     }
 
     void unsubscribe(SpotifyAudioSendHandler handler) {

@@ -278,6 +278,11 @@ class SpotifyAudioPipelineTest {
         pipeline.start();
         verify(telemetry, timeout(2_000)).startRecovery(AudioPipelineTelemetry.RecoveryReason.IO_FAILURE);
         assumeFifoAvailable(fifo);
+        awaitState(pipeline.state(), AudioPipelineState.ReaderState.OPENING);
+        assertTrue(pipeline.state().isReady());
+        assertEquals(Status.UP, pipeline.health().getStatus());
+        verify(recovery, never()).closeSuccess();
+        verify(recovery, never()).closeFailure(any());
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
             Future<?> writer = executor.submit(() -> {

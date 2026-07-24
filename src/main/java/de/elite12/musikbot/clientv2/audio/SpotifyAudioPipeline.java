@@ -185,9 +185,7 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
             while (running.get()) {
                 try {
                     verifyFifo();
-                    if (recovery.get() == null) {
-                        state.setReaderState(AudioPipelineState.ReaderState.OPENING);
-                    }
+                    state.setReaderState(AudioPipelineState.ReaderState.OPENING);
                     telemetry.fifoReopened(retryDelay);
                     InputStream input = openFifo();
                     if (input == null) {
