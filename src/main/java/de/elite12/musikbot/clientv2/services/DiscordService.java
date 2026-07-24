@@ -6,12 +6,12 @@ import de.elite12.musikbot.clientv2.events.SongFinishedEvent;
 import de.elite12.musikbot.clientv2.events.StartSongEvent;
 import de.elite12.musikbot.clientv2.events.StopSongEvent;
 import de.elite12.musikbot.clientv2.audio.SpotifyAudioPipeline;
-import de.elite12.musikbot.clientv2.audio.SpotifyAudioSendHandler;
 import club.minnced.discord.jdave.interop.JDaveSessionFactory;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.audio.AudioModuleConfig;
 import net.dv8tion.jda.api.audio.AudioSendHandler;
+import net.dv8tion.jda.api.audio.hooks.ConnectionStatus;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.GuildVoiceState;
@@ -33,7 +33,9 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import java.util.EnumSet;
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static net.dv8tion.jda.api.requests.GatewayIntent.GUILD_VOICE_STATES;
 
@@ -50,6 +52,7 @@ public class DiscordService extends ListenerAdapter {
 
     private final JDA JDA;
     private final SpotifyAudioPipeline pipeline;
+    private final Map<Long, DiscordAudioConnectionLifecycle> audioLifecycles = new ConcurrentHashMap<>();
 
     public DiscordService(Clientv2ServiceProperties properties, SpotifyAudioPipeline pipeline) throws InterruptedException {
         this.pipeline = pipeline;
@@ -90,28 +93,13 @@ public class DiscordService extends ListenerAdapter {
         //Check if last member in channel
         if (currentChannel != null && (Objects.equals(event.getChannelJoined(), currentChannel) || Objects.equals(event.getChannelLeft(), currentChannel))) {
             if (currentChannel.getMembers().size() <= 1) {
-                this.disconnectVoice(event.getGuild().getAudioManager());
+                lifecycleFor(event.getGuild().getAudioManager()).disconnect();
             }
         }
 
         //Check if bot has been disconnected
         if (event.getMember().getIdLong() == this.JDA.getSelfUser().getIdLong() && event.getNewValue() == null) {
-            this.disconnectVoice(event.getGuild().getAudioManager());
-        }
-    }
-
-    private void disconnectVoice(AudioManager audioManager) {
-        closeSendingHandler(audioManager);
-        audioManager.closeAudioConnection();
-        this.checkNoListeners();
-    }
-
-    private void closeSendingHandler(AudioManager audioManager) {
-        AudioSendHandler sendingHandler = audioManager.getSendingHandler();
-
-        if (sendingHandler instanceof SpotifyAudioSendHandler spotifyHandler) {
-            spotifyHandler.close();
-            audioManager.setSendingHandler(null);
+            lifecycleFor(event.getGuild().getAudioManager()).disconnected();
         }
     }
 
@@ -131,15 +119,13 @@ public class DiscordService extends ListenerAdapter {
 
         Guild guild = Objects.requireNonNull(event.getGuild());
         AudioManager audioManager = guild.getAudioManager();
+        boolean connected = audioManager.isConnected();
+        lifecycleFor(audioManager).disconnect();
 
-        if (!audioManager.isConnected()) {
-            closeSendingHandler(audioManager);
-            this.checkNoListeners();
+        if (!connected) {
             interactionHook.editOriginal("I am not currently in a voice channel!").queue();
             return;
         }
-
-        disconnectVoice(audioManager);
 
         interactionHook.editOriginal("Will do!").queue();
     }
@@ -172,37 +158,57 @@ public class DiscordService extends ListenerAdapter {
         audioManager.setAutoReconnect(false);
         AudioChannelUnion channel = voiceState.getChannel();
 
-        SpotifyAudioSendHandler installedHandler = null;
-        if (audioManager.getSendingHandler() == null) {
-            installedHandler = pipeline.broadcaster().subscribe();
-            try {
-                audioManager.setSendingHandler(installedHandler);
-            } catch (RuntimeException failure) {
-                closeFailedJoinHandler(audioManager, installedHandler);
-                throw failure;
-            }
+        DiscordAudioConnectionLifecycle lifecycle = lifecycleFor(audioManager);
+        DiscordAudioConnectionLifecycle.JoinAttempt attempt = lifecycle.beginJoin();
+        if (attempt == null) {
+            interactionHook.editOriginal("I am already connected or connecting to a voice channel!").queue();
+            return;
         }
 
         try {
             audioManager.openAudioConnection(channel);
-            interactionHook.editOriginal("Will do!").queue();
         } catch (InsufficientPermissionException insufficientPermissionException) {
-            closeFailedJoinHandler(audioManager, installedHandler);
+            lifecycle.openFailed(attempt);
             interactionHook.editOriginal("I dont have permissions to join your channel!").queue();
+            return;
         } catch (RuntimeException failure) {
-            closeFailedJoinHandler(audioManager, installedHandler);
+            lifecycle.openFailed(attempt);
             throw failure;
         }
+
+        interactionHook.editOriginal("Will do!").queue();
     }
 
-    private void closeFailedJoinHandler(AudioManager audioManager, SpotifyAudioSendHandler installedHandler) {
-        if (installedHandler == null) {
-            return;
-        }
-        installedHandler.close();
-        if (audioManager.getSendingHandler() == installedHandler) {
-            audioManager.setSendingHandler(null);
-        }
+    private DiscordAudioConnectionLifecycle lifecycleFor(AudioManager audioManager) {
+        return audioLifecycles.computeIfAbsent(audioManager.getGuild().getIdLong(), ignored -> {
+            DiscordAudioConnectionLifecycle lifecycle = new DiscordAudioConnectionLifecycle(
+                    pipeline.broadcaster(),
+                    new DiscordAudioConnectionLifecycle.Connection() {
+                        @Override
+                        public ConnectionStatus status() {
+                            return audioManager.getConnectionStatus();
+                        }
+
+                        @Override
+                        public AudioSendHandler sendingHandler() {
+                            return audioManager.getSendingHandler();
+                        }
+
+                        @Override
+                        public void setSendingHandler(AudioSendHandler handler) {
+                            audioManager.setSendingHandler(handler);
+                        }
+
+                        @Override
+                        public void close() {
+                            audioManager.closeAudioConnection();
+                        }
+                    },
+                    this::checkNoListeners
+            );
+            audioManager.setConnectionListener(lifecycle);
+            return lifecycle;
+        });
     }
 
     private void checkNoListeners() {
