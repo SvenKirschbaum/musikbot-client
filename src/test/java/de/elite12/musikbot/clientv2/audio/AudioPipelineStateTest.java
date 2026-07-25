@@ -1,6 +1,7 @@
 package de.elite12.musikbot.clientv2.audio;
 
 import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.context.Scope;
 import org.junit.jupiter.api.Test;
 
@@ -17,11 +18,25 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AudioPipelineStateTest {
+
+    @Test
+    void failedOperationSetsErrorAndEndsWithoutRecordingExceptionAttributes() {
+        Span span = mock(Span.class);
+        AudioPipelineTelemetry.Operation operation = new AudioPipelineTelemetry.Operation(span);
+
+        operation.closeFailure(new IllegalStateException("must stay in logs only"));
+
+        verify(span).setStatus(StatusCode.ERROR);
+        verify(span).end();
+        verify(span, never()).recordException(any(Throwable.class));
+    }
 
     @Test
     void operationMakesSpanCurrentOnlyForReturnedLexicalScope() {

@@ -257,21 +257,19 @@ public final class AudioPipelineTelemetry implements AutoCloseable {
         }
 
         public void closeSuccess() {
-            finish(StatusCode.OK, null);
+            finish(StatusCode.OK);
         }
 
         public void closeFailure(Throwable error) {
-            finish(StatusCode.ERROR, Objects.requireNonNull(error, "error"));
+            Objects.requireNonNull(error, "error");
+            finish(StatusCode.ERROR);
         }
 
-        private void finish(StatusCode status, Throwable error) {
+        private void finish(StatusCode status) {
             if (!closed.compareAndSet(false, true)) {
                 return;
             }
             try {
-                if (error != null) {
-                    span.recordException(error);
-                }
                 span.setStatus(status);
             } finally {
                 span.end();
