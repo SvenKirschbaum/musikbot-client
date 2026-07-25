@@ -9,6 +9,7 @@ import org.springframework.boot.health.contributor.Status;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
@@ -27,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -45,6 +47,130 @@ class SpotifyAudioPipelineTest {
 
     @TempDir
     Path temporaryDirectory;
+
+    @Test
+    void rejectsHistoryBelowOneTwentyMillisecondFrame() {
+        Clientv2ServiceProperties properties = properties(temporaryDirectory.resolve("audio.pcm"));
+        properties.setSpotifyAudioMaxHistory(Duration.ofMillis(19));
+
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+                () -> pipeline(properties, mock(AudioPipelineTelemetry.class), () -> 0, ignored -> {}));
+
+        assertTrue(failure.getMessage().contains("spotifyAudioMaxHistory"));
+    }
+
+    @Test
+    void expectedPlaybackWithoutSourceBecomesDownAfterGraceAndPauseRecoversHealth() throws Exception {
+        Path fifo = temporaryDirectory.resolve("silent.pcm");
+        assumeFifoAvailable(fifo);
+        AtomicLong now = new AtomicLong();
+        PlaybackExpectation expectation = new PlaybackExpectation(now::get);
+        SpotifyAudioPipeline pipeline = pipeline(properties(fifo), mock(AudioPipelineTelemetry.class),
+                expectation, now::get, nanos -> Thread.sleep(Duration.ofNanos(nanos)));
+        pipeline.start();
+        try {
+            awaitState(pipeline.state(), AudioPipelineState.ReaderState.OPENING);
+            assertEquals(Status.UP, pipeline.health().getStatus());
+
+            expectation.playing();
+            now.addAndGet(SpotifyAudioPipeline.SOURCE_SILENCE_GRACE.toNanos() + 1);
+            assertEquals(Status.DOWN, pipeline.health().getStatus());
+            assertEquals("Spotify playback expected but source PCM is stale",
+                    pipeline.health().getDetails().get("reason"));
+
+            expectation.notPlaying();
+            assertEquals(Status.UP, pipeline.health().getStatus());
+        } finally {
+            pipeline.close();
+        }
+    }
+
+    @Test
+    void sourceArrivalIsRecordedAtReadAndConversionExcludesBlockedReadTime() throws Exception {
+        AtomicLong now = new AtomicLong();
+        AudioPipelineTelemetry telemetry = mock(AudioPipelineTelemetry.class);
+        CountDownLatch parked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        SpotifyAudioPipeline pipeline = pipeline(telemetry, now::get, ignored -> {
+            parked.countDown();
+            await(release);
+        });
+        byte[] pcm = pcm(Duration.ofMillis(20), 100);
+        ByteArrayInputStream delegate = new ByteArrayInputStream(pcm);
+        InputStream delayed = new InputStream() {
+            private boolean delayed;
+
+            @Override
+            public int read(byte[] target, int offset, int length) {
+                if (!delayed) {
+                    delayed = true;
+                    now.addAndGet(Duration.ofMillis(5).toNanos());
+                }
+                return delegate.read(target, offset, length);
+            }
+
+            @Override
+            public int read() {
+                return delegate.read();
+            }
+        };
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            Future<?> generation = executor.submit(() -> {
+                try {
+                    pipeline.runGeneration(delayed);
+                } catch (IOException exception) {
+                    throw new AssertionError(exception);
+                }
+            });
+            assertTrue(parked.await(2, TimeUnit.SECONDS));
+            assertEquals(Duration.ofMillis(5).toNanos(), pipeline.state().getLatestSourceArrivalNanos());
+            verify(telemetry).conversion(Duration.ZERO);
+            release.countDown();
+            generation.get(2, TimeUnit.SECONDS);
+        } finally {
+            release.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void emptySubscriberPollEmitsOneUnderrunPerStaleTransitionOnlyWhileExpected() {
+        AtomicLong now = new AtomicLong();
+        AudioPipelineTelemetry telemetry = mock(AudioPipelineTelemetry.class);
+        PlaybackExpectation expectation = new PlaybackExpectation(now::get);
+        SpotifyAudioPipeline pipeline = pipeline(properties(temporaryDirectory.resolve("audio.pcm")), telemetry,
+                expectation, now::get, ignored -> {});
+        SpotifyAudioSendHandler subscription = pipeline.broadcaster().subscribe();
+
+        assertFalse(subscription.canProvide());
+        expectation.playing();
+        now.addAndGet(SpotifyAudioPipeline.SOURCE_SILENCE_GRACE.toNanos() + 1);
+        assertFalse(subscription.canProvide());
+        assertFalse(subscription.canProvide());
+        verify(telemetry, times(1)).underrun();
+
+        expectation.notPlaying();
+        assertFalse(subscription.canProvide());
+        expectation.playing();
+        now.addAndGet(SpotifyAudioPipeline.SOURCE_SILENCE_GRACE.toNanos() + 1);
+        assertFalse(subscription.canProvide());
+        verify(telemetry, times(2)).underrun();
+    }
+
+    @Test
+    void generationResetCountsAllQueuedSubscriberFrames() throws Exception {
+        AudioPipelineTelemetry telemetry = mock(AudioPipelineTelemetry.class);
+        SpotifyAudioPipeline pipeline = pipeline(telemetry, () -> 0, ignored -> {});
+        pipeline.broadcaster().subscribe();
+        pipeline.broadcaster().subscribe();
+        pipeline.broadcaster().publish(new byte[]{1});
+        pipeline.broadcaster().publish(new byte[]{2});
+
+        pipeline.runGeneration(new ByteArrayInputStream(new byte[0]));
+
+        verify(telemetry).dropped(4, AudioPipelineTelemetry.DropReason.GENERATION_RESET);
+    }
 
     @Test
     void propertiesProvideExactAudioDefaults() {
@@ -238,7 +364,9 @@ class SpotifyAudioPipelineTest {
     @Test
     void invalidFifoAndStartupVerifierFailureAreDown() throws Exception {
         Path regularFile = Files.createFile(temporaryDirectory.resolve("regular.pcm"));
-        SpotifyAudioPipeline invalid = pipeline(properties(regularFile), mock(AudioPipelineTelemetry.class),
+        AudioPipelineTelemetry invalidTelemetry = mock(AudioPipelineTelemetry.class);
+        when(invalidTelemetry.startRecovery(any())).thenReturn(mock(AudioPipelineTelemetry.Operation.class));
+        SpotifyAudioPipeline invalid = pipeline(properties(regularFile), invalidTelemetry,
                 System::nanoTime, nanos -> Thread.sleep(Duration.ofNanos(nanos)));
         invalid.start();
         try {
@@ -253,7 +381,7 @@ class SpotifyAudioPipelineTest {
         IllegalStateException guardFailure = new IllegalStateException("sinc unavailable");
         SpotifyAudioPipeline guarded = new SpotifyAudioPipeline(
                 properties(temporaryDirectory.resolve("unused")), new SoftwareVolume(), new AudioPipelineState(),
-                mock(AudioPipelineTelemetry.class), System::nanoTime, ignored -> {}, () -> {
+                mock(AudioPipelineTelemetry.class), new PlaybackExpectation(), System::nanoTime, ignored -> {}, () -> {
                     throw guardFailure;
                 }
         );
@@ -268,15 +396,18 @@ class SpotifyAudioPipelineTest {
     @Test
     void unexpectedIoRecoveryEndsOnFirstOutputAndNotAtGenerationReset() throws Exception {
         Path fifo = temporaryDirectory.resolve("late.pcm");
+        AtomicLong now = new AtomicLong();
         AudioPipelineTelemetry telemetry = mock(AudioPipelineTelemetry.class);
         AudioPipelineTelemetry.Operation recovery = mock(AudioPipelineTelemetry.Operation.class);
         when(telemetry.startRecovery(AudioPipelineTelemetry.RecoveryReason.IO_FAILURE)).thenReturn(recovery);
         when(telemetry.startCatchUp(anyLong())).thenReturn(mock(AudioPipelineTelemetry.Operation.class));
-        SpotifyAudioPipeline pipeline = pipeline(properties(fifo), telemetry, () -> 0,
+        SpotifyAudioPipeline pipeline = pipeline(properties(fifo), telemetry, now::get,
                 nanos -> Thread.sleep(Duration.ofNanos(nanos)));
 
         pipeline.start();
         verify(telemetry, timeout(2_000)).startRecovery(AudioPipelineTelemetry.RecoveryReason.IO_FAILURE);
+        verify(telemetry, never()).fifoReopened(any());
+        now.set(Duration.ofMillis(137).toNanos());
         assumeFifoAvailable(fifo);
         awaitState(pipeline.state(), AudioPipelineState.ReaderState.OPENING);
         assertTrue(pipeline.state().isReady());
@@ -292,6 +423,7 @@ class SpotifyAudioPipelineTest {
                 return null;
             });
             verify(recovery, timeout(2_000)).closeSuccess();
+            verify(telemetry).fifoReopened(Duration.ofMillis(137));
             writer.get(2, TimeUnit.SECONDS);
             verify(telemetry, times(1)).startRecovery(AudioPipelineTelemetry.RecoveryReason.IO_FAILURE);
             verify(recovery, never()).closeFailure(any());
@@ -337,7 +469,7 @@ class SpotifyAudioPipelineTest {
         Clientv2ServiceProperties properties = properties(fifo);
         properties.setSpotifyAudioMaxHistory(Duration.ofMillis(20));
         SpotifyAudioPipeline pipeline = new SpotifyAudioPipeline(
-                properties, volume, state, telemetry, () -> 0,
+                properties, volume, state, telemetry, new PlaybackExpectation(() -> 0), () -> 0,
                 nanos -> Thread.sleep(Duration.ofNanos(nanos)), () -> {}
         );
         reference.set(pipeline);
@@ -384,8 +516,18 @@ class SpotifyAudioPipelineTest {
             java.util.function.LongSupplier clock,
             SpotifyAudioPipeline.Parker parker
     ) {
+        return pipeline(properties, telemetry, new PlaybackExpectation(clock), clock, parker);
+    }
+
+    private SpotifyAudioPipeline pipeline(
+            Clientv2ServiceProperties properties,
+            AudioPipelineTelemetry telemetry,
+            PlaybackExpectation expectation,
+            java.util.function.LongSupplier clock,
+            SpotifyAudioPipeline.Parker parker
+    ) {
         return new SpotifyAudioPipeline(properties, new SoftwareVolume(), new AudioPipelineState(clock), telemetry,
-                clock, parker, () -> {});
+                expectation, clock, parker, () -> {});
     }
 
     private static Clientv2ServiceProperties properties(Path fifo) {
@@ -475,7 +617,7 @@ class SpotifyAudioPipelineTest {
     private static void assertExpectedEofReset(AudioPipelineState state) {
         assertEquals(AudioPipelineState.ReaderState.STOPPED, state.getReaderState());
         assertFalse(state.isReady());
-        assertEquals(Long.MIN_VALUE, state.getLatestSourceFrameNanos());
+        assertEquals(Long.MIN_VALUE, state.getLatestSourceArrivalNanos());
         assertEquals(Long.MIN_VALUE, state.getLatestOutputFrameNanos());
         assertEquals(0, state.getSchedulerLatenessMillis());
         assertEquals(0, state.getBufferedMillis());

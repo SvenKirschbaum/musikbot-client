@@ -12,16 +12,26 @@ public final class SpotifyAudioSendHandler implements AudioSendHandler, AutoClos
 
     private final AudioFrameBroadcaster owner;
     private final BlockingQueue<byte[]> frames;
+    private final Runnable emptyPoll;
     private final AtomicBoolean closed = new AtomicBoolean();
 
     SpotifyAudioSendHandler(AudioFrameBroadcaster owner, BlockingQueue<byte[]> frames) {
+        this(owner, frames, () -> {});
+    }
+
+    SpotifyAudioSendHandler(AudioFrameBroadcaster owner, BlockingQueue<byte[]> frames, Runnable emptyPoll) {
         this.owner = owner;
         this.frames = frames;
+        this.emptyPoll = emptyPoll;
     }
 
     @Override
     public boolean canProvide() {
-        return !frames.isEmpty();
+        boolean available = !frames.isEmpty();
+        if (!available) {
+            emptyPoll.run();
+        }
+        return available;
     }
 
     @Nullable
@@ -59,8 +69,10 @@ public final class SpotifyAudioSendHandler implements AudioSendHandler, AutoClos
         }
     }
 
-    synchronized void clear() {
+    synchronized int clear() {
+        int discarded = frames.size();
         frames.clear();
+        return discarded;
     }
 
     synchronized int queueDepth() {

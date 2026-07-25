@@ -23,6 +23,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AudioFrameBroadcasterTest {
 
     @Test
+    void resetReturnsEverySubscriberFrameActuallyDiscarded() {
+        AudioFrameBroadcaster broadcaster = new AudioFrameBroadcaster(3, ignored -> {});
+        SpotifyAudioSendHandler first = broadcaster.subscribe();
+        SpotifyAudioSendHandler second = broadcaster.subscribe();
+        broadcaster.publish(new byte[]{1});
+        broadcaster.publish(new byte[]{2});
+        first.provide20MsAudio();
+
+        assertEquals(3, broadcaster.reset());
+        assertFalse(first.canProvide());
+        assertFalse(second.canProvide());
+    }
+
+    @Test
     void publishesEachFrameToEverySubscriber() {
         AudioFrameBroadcaster broadcaster = new AudioFrameBroadcaster(10, ignored -> {});
         SpotifyAudioSendHandler first = broadcaster.subscribe();

@@ -3,6 +3,9 @@ package de.elite12.musikbot.clientv2.audio;
 import de.elite12.musikbot.clientv2.core.Clientv2ServiceProperties;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import io.opentelemetry.context.Scope;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.health.contributor.Health;
 import org.springframework.boot.health.contributor.HealthIndicator;
 import org.springframework.stereotype.Component;
@@ -25,8 +28,10 @@ import java.util.function.LongSupplier;
 @Component
 public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseable {
 
+    private static final Logger logger = LoggerFactory.getLogger(SpotifyAudioPipeline.class);
     private static final int MAX_HISTORY_FRAMES = 10;
     private static final long FRAME_MILLIS = 20;
+    static final Duration SOURCE_SILENCE_GRACE = Duration.ofSeconds(2);
     private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(2);
     private static final int FILE_TYPE_MASK = 0170000;
     private static final int FIFO_TYPE = 0010000;
@@ -38,6 +43,7 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
     private final SoftwareVolume volume;
     private final AudioPipelineState state;
     private final AudioPipelineTelemetry telemetry;
+    private final PlaybackExpectation playbackExpectation;
     private final AudioFrameBroadcaster broadcaster;
     private final LongSupplier nanoTime;
     private final Parker parker;
@@ -45,8 +51,9 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicBoolean waitingForWriter = new AtomicBoolean();
     private final AtomicReference<InputStream> activeInput = new AtomicReference<>();
-    private final AtomicReference<AudioPipelineTelemetry.Operation> recovery = new AtomicReference<>();
+    private final AtomicReference<Recovery> recovery = new AtomicReference<>();
     private final AtomicReference<Throwable> lastUnexpectedFailure = new AtomicReference<>();
+    private final AtomicBoolean underrunActive = new AtomicBoolean();
 
     private volatile Thread worker;
     private volatile Throwable terminalFailure;
@@ -56,9 +63,10 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
             Clientv2ServiceProperties properties,
             SoftwareVolume volume,
             AudioPipelineState state,
-            AudioPipelineTelemetry telemetry
+            AudioPipelineTelemetry telemetry,
+            PlaybackExpectation playbackExpectation
     ) {
-        this(properties, volume, state, telemetry, System::nanoTime, LockSupport::parkNanos,
+        this(properties, volume, state, telemetry, playbackExpectation, System::nanoTime, LockSupport::parkNanos,
                 CorrettoSincVerifier::verify);
     }
 
@@ -67,6 +75,7 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
             SoftwareVolume volume,
             AudioPipelineState state,
             AudioPipelineTelemetry telemetry,
+            PlaybackExpectation playbackExpectation,
             LongSupplier nanoTime,
             Parker parker,
             Runnable verifier
@@ -75,16 +84,21 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
         fifo = Objects.requireNonNull(properties.getSpotifyAudioFifo(), "spotifyAudioFifo");
         retryDelay = requirePositive(properties.getSpotifyAudioRetryDelay(), "spotifyAudioRetryDelay");
         Duration maxHistory = requirePositive(properties.getSpotifyAudioMaxHistory(), "spotifyAudioMaxHistory");
+        if (maxHistory.compareTo(Duration.ofMillis(FRAME_MILLIS)) < 0) {
+            throw new IllegalArgumentException("spotifyAudioMaxHistory must be at least " + FRAME_MILLIS + "ms");
+        }
         int historyFrames = Math.min(MAX_HISTORY_FRAMES,
-                Math.max(1, Math.toIntExact(maxHistory.toMillis() / FRAME_MILLIS)));
+                Math.toIntExact(maxHistory.toMillis() / FRAME_MILLIS));
         this.volume = Objects.requireNonNull(volume, "volume");
         this.state = Objects.requireNonNull(state, "state");
         this.telemetry = Objects.requireNonNull(telemetry, "telemetry");
+        this.playbackExpectation = Objects.requireNonNull(playbackExpectation, "playbackExpectation");
         this.nanoTime = Objects.requireNonNull(nanoTime, "nanoTime");
         this.parker = Objects.requireNonNull(parker, "parker");
         this.verifier = Objects.requireNonNull(verifier, "verifier");
         broadcaster = new AudioFrameBroadcaster(historyFrames,
-                count -> telemetry.dropped(count, AudioPipelineTelemetry.DropReason.SUBSCRIBER_OVERFLOW));
+                count -> telemetry.dropped(count, AudioPipelineTelemetry.DropReason.SUBSCRIBER_OVERFLOW),
+                this::onEmptySubscriberPoll);
     }
 
     public AudioFrameBroadcaster broadcaster() {
@@ -126,8 +140,11 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
             health = Health.down().withDetail("reason", terminalHealthReason);
         } else if (currentWorker == null || !currentWorker.isAlive()) {
             health = Health.down().withDetail("reason", "Audio pipeline worker is not running");
-        } else if (!status.ready()) {
+        } else if (status.state() == AudioPipelineState.ReaderState.FAILED
+                || status.state() == AudioPipelineState.ReaderState.RETRYING) {
             health = Health.down().withDetail("reason", status.failure().orElse("Audio pipeline failed"));
+        } else if (sourceStale()) {
+            health = Health.down().withDetail("reason", "Spotify playback expected but source PCM is stale");
         } else {
             health = Health.up();
         }
@@ -186,11 +203,11 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
                 try {
                     verifyFifo();
                     state.setReaderState(AudioPipelineState.ReaderState.OPENING);
-                    telemetry.fifoReopened(retryDelay);
                     InputStream input = openFifo();
                     if (input == null) {
                         break;
                     }
+                    recordReopenCompleted();
                     try (input) {
                         runGeneration(input, true);
                     } finally {
@@ -214,6 +231,7 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
                     terminalHealthReason = TERMINAL_FAILURE_REASON;
                     terminalFailure = failure;
                     state.failReadiness(TERMINAL_FAILURE_REASON);
+                    logUnexpectedFailure(failure);
                     break;
                 }
 
@@ -224,10 +242,10 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
         } finally {
             waitingForWriter.set(false);
             closeActiveInput();
-            AudioPipelineTelemetry.Operation pending = recovery.getAndSet(null);
+            Recovery pending = recovery.getAndSet(null);
             if (pending != null) {
                 Throwable failure = lastUnexpectedFailure.get();
-                pending.closeFailure(failure == null
+                pending.operation().closeFailure(failure == null
                         ? new IllegalStateException("Audio pipeline stopped during recovery")
                         : failure);
             }
@@ -255,21 +273,21 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
 
     private void runGeneration(InputStream input, boolean managed) throws IOException {
         Objects.requireNonNull(input, "input");
-        broadcaster.reset();
+        resetBroadcaster();
         state.incrementGeneration();
         RealtimeFramePacer pacer = new RealtimeFramePacer(nanoTime);
         pacer.reset();
         byte[] frame = new byte[SpotifyPcmConverter.OUTPUT_FRAME_BYTES];
         boolean expectedEof = false;
 
-        try (SpotifyPcmConverter converter = new SpotifyPcmConverter(input)) {
+        SourceTimingInputStream timedInput = new SourceTimingInputStream(input);
+        try (SpotifyPcmConverter converter = new SpotifyPcmConverter(timedInput)) {
             while (!managed || running.get()) {
                 long conversionStarted = nanoTime.getAsLong();
                 if (!converter.readFrame(frame)) {
                     expectedEof = true;
                     break;
                 }
-                state.recordSourceFrame();
                 telemetry.sourceFrames(1);
 
                 long framesToDrop = pacer.framesToDrop();
@@ -284,14 +302,15 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
                         expectedEof = true;
                         break;
                     }
-                    state.recordSourceFrame();
                 }
 
-                telemetry.conversion(Duration.ofNanos(elapsedSince(conversionStarted)));
+                long conversionNanos = Math.max(0, elapsedSince(conversionStarted) - timedInput.drainReadNanos());
+                telemetry.conversion(Duration.ofNanos(conversionNanos));
                 volume.apply(frame);
-                long frameAgeNanos = Math.max(0, nanoTime.getAsLong() - state.getLatestSourceFrameNanos());
+                long frameAgeNanos = Math.max(0, nanoTime.getAsLong() - state.getLatestSourceArrivalNanos());
                 broadcaster.publish(frame.clone());
                 state.recordOutputFrame();
+                underrunActive.set(false);
                 int subscribers = broadcaster.subscriberCount();
                 long bufferedMillis = broadcaster.maxSubscriberQueueDepth() * FRAME_MILLIS;
                 state.setSubscribers(subscribers);
@@ -305,7 +324,7 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
             if (expectedEof) {
                 resetAfterExpectedEof();
             } else {
-                broadcaster.reset();
+                resetBroadcaster();
                 state.setBufferedMillis(0);
             }
         }
@@ -313,7 +332,8 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
 
     private long discardFrames(SpotifyPcmConverter converter, long count, byte[] frame) throws IOException {
         AudioPipelineTelemetry.Operation catchUp = telemetry.startCatchUp(count);
-        try {
+        try (Scope ignored = catchUp.makeCurrent()) {
+            logger.warn("Spotify audio pipeline catching up by dropping {} frames", count);
             long discarded = converter.discardFrames(count, frame);
             catchUp.closeSuccess();
             return discarded;
@@ -330,20 +350,30 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
             case CONVERSION_FAILURE -> "Spotify PCM conversion failure";
         });
         if (recovery.get() == null) {
-            recovery.set(telemetry.startRecovery(reason));
+            Recovery started = new Recovery(telemetry.startRecovery(reason), nanoTime.getAsLong());
+            if (recovery.compareAndSet(null, started)) {
+                try (Scope ignored = started.operation().makeCurrent()) {
+                    logger.warn("Spotify audio pipeline entering recovery: {}", reason.telemetryValue(), failure);
+                }
+            } else {
+                started.operation().closeFailure(failure);
+            }
         }
     }
 
     private void completeRecovery() {
         lastUnexpectedFailure.set(null);
-        AudioPipelineTelemetry.Operation pending = recovery.getAndSet(null);
+        Recovery pending = recovery.getAndSet(null);
         if (pending != null) {
-            pending.closeSuccess();
+            try (Scope ignored = pending.operation().makeCurrent()) {
+                logger.info("Spotify audio pipeline returned to healthy flow");
+            }
+            pending.operation().closeSuccess();
         }
     }
 
     private void resetAfterExpectedEof() {
-        broadcaster.reset();
+        resetBroadcaster();
         state.resetForExpectedEof();
         state.setSubscribers(broadcaster.subscriberCount());
     }
@@ -408,6 +438,117 @@ public final class SpotifyAudioPipeline implements HealthIndicator, AutoCloseabl
 
     private long elapsedSince(long started) {
         return Math.max(0, nanoTime.getAsLong() - started);
+    }
+
+    private void recordReopenCompleted() {
+        Recovery pending = recovery.get();
+        if (pending != null && pending.markReopened()) {
+            Duration elapsed = Duration.ofNanos(elapsedSince(pending.startedNanos()));
+            try (Scope ignored = pending.operation().makeCurrent()) {
+                telemetry.fifoReopened(elapsed);
+                logger.info("Spotify audio FIFO reopened after {} ms", elapsed.toMillis());
+            }
+        }
+    }
+
+    private void resetBroadcaster() {
+        long discarded = broadcaster.reset();
+        if (discarded > 0) {
+            telemetry.dropped(discarded, AudioPipelineTelemetry.DropReason.GENERATION_RESET);
+        }
+    }
+
+    private boolean sourceStale() {
+        return playbackExpectation.isSourceStale(SOURCE_SILENCE_GRACE, state.getLatestSourceArrivalNanos());
+    }
+
+    private void onEmptySubscriberPoll() {
+        boolean flowStale = sourceStale()
+                || playbackExpectation.isSourceStale(SOURCE_SILENCE_GRACE, state.getLatestOutputFrameNanos());
+        if (!flowStale) {
+            underrunActive.set(false);
+        } else if (underrunActive.compareAndSet(false, true)) {
+            telemetry.underrun();
+        }
+    }
+
+    private void logUnexpectedFailure(Throwable failure) {
+        Recovery pending = recovery.get();
+        if (pending == null) {
+            logger.error("Spotify audio pipeline terminated unexpectedly", failure);
+            return;
+        }
+        try (Scope ignored = pending.operation().makeCurrent()) {
+            logger.error("Spotify audio pipeline terminated unexpectedly during recovery", failure);
+        }
+    }
+
+    private final class SourceTimingInputStream extends InputStream {
+
+        private final InputStream delegate;
+        private long readNanos;
+
+        private SourceTimingInputStream(InputStream delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public int read() throws IOException {
+            long started = nanoTime.getAsLong();
+            int value = delegate.read();
+            recordRead(started, value < 0 ? -1 : 1);
+            return value;
+        }
+
+        @Override
+        public int read(byte[] target, int offset, int length) throws IOException {
+            long started = nanoTime.getAsLong();
+            int count = delegate.read(target, offset, length);
+            recordRead(started, count);
+            return count;
+        }
+
+        @Override
+        public void close() throws IOException {
+            delegate.close();
+        }
+
+        private void recordRead(long started, int count) {
+            readNanos += elapsedSince(started);
+            if (count > 0) {
+                state.recordSourceArrival();
+            }
+        }
+
+        private long drainReadNanos() {
+            long duration = readNanos;
+            readNanos = 0;
+            return duration;
+        }
+    }
+
+    private static final class Recovery {
+
+        private final AudioPipelineTelemetry.Operation operation;
+        private final long startedNanos;
+        private final AtomicBoolean reopened = new AtomicBoolean();
+
+        private Recovery(AudioPipelineTelemetry.Operation operation, long startedNanos) {
+            this.operation = operation;
+            this.startedNanos = startedNanos;
+        }
+
+        private AudioPipelineTelemetry.Operation operation() {
+            return operation;
+        }
+
+        private long startedNanos() {
+            return startedNanos;
+        }
+
+        private boolean markReopened() {
+            return reopened.compareAndSet(false, true);
+        }
     }
 
     private static Duration requirePositive(Duration duration, String name) {

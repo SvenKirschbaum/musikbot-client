@@ -11,6 +11,7 @@ import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanKind;
 import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Scope;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -49,14 +50,17 @@ public final class AudioPipelineTelemetry implements AutoCloseable {
         sourceFrames = counter(meter, "spotify.audio.source.frames", "Source frames read", "{frame}");
         outputFrames = counter(meter, "spotify.audio.output.frames", "Output frames published", "{frame}");
         droppedFrames = counter(meter, "spotify.audio.dropped.frames", "Source frames dropped", "{frame}");
-        underruns = counter(meter, "spotify.audio.underruns", "Subscriber buffer underruns", "{event}");
-        fifoReopens = counter(meter, "spotify.audio.fifo.reopens", "FIFO reopen attempts", "{event}");
+        underruns = counter(meter, "spotify.audio.underruns",
+                "Transitions to stale expected playback observed by a subscriber", "{event}");
+        fifoReopens = counter(meter, "spotify.audio.fifo.reopens", "Successful FIFO recovery reopens", "{event}");
         conversionFailures = counter(meter, "spotify.audio.conversion.failures", "PCM conversion failures", "{event}");
 
-        conversionDuration = histogram(meter, "spotify.audio.conversion.duration", "PCM conversion duration");
+        conversionDuration = histogram(meter, "spotify.audio.conversion.duration",
+                "PCM conversion processing duration excluding source reads");
         frameAge = histogram(meter, "spotify.audio.frame.age", "Published frame age");
         schedulerLateness = histogram(meter, "spotify.audio.scheduler.lateness", "Frame scheduler lateness");
-        reopenDelay = histogram(meter, "spotify.audio.fifo.reopen.delay", "FIFO reopen delay");
+        reopenDelay = histogram(meter, "spotify.audio.fifo.reopen.delay",
+                "Elapsed time from recovery start to FIFO reopen");
         subscriberBufferDuration = histogram(meter, "spotify.audio.subscriber.buffer.duration",
                 "Subscriber buffered duration");
 
@@ -77,7 +81,7 @@ public final class AudioPipelineTelemetry implements AutoCloseable {
                 .buildWithCallback(measurement -> measurement.record(state.getSubscribers()));
         readyGauge = meter.gaugeBuilder("spotify.audio.ready")
                 .ofLongs()
-                .setDescription("Whether the audio pipeline is ready")
+                .setDescription("Whether the FIFO reader is opening or reading")
                 .setUnit("1")
                 .buildWithCallback(measurement -> measurement.record(state.isReady() ? 1 : 0));
     }
@@ -244,23 +248,30 @@ public final class AudioPipelineTelemetry implements AutoCloseable {
         private final Span span;
         private final AtomicBoolean closed = new AtomicBoolean();
 
-        private Operation(Span span) {
+        Operation(Span span) {
             this.span = span;
         }
 
+        public Scope makeCurrent() {
+            return span.makeCurrent();
+        }
+
         public void closeSuccess() {
-            finish(StatusCode.OK);
+            finish(StatusCode.OK, null);
         }
 
         public void closeFailure(Throwable error) {
-            finish(StatusCode.ERROR);
+            finish(StatusCode.ERROR, Objects.requireNonNull(error, "error"));
         }
 
-        private void finish(StatusCode status) {
+        private void finish(StatusCode status, Throwable error) {
             if (!closed.compareAndSet(false, true)) {
                 return;
             }
             try {
+                if (error != null) {
+                    span.recordException(error);
+                }
                 span.setStatus(status);
             } finally {
                 span.end();

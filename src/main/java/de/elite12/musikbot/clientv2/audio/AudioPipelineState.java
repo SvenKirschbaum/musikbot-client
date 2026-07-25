@@ -20,7 +20,7 @@ public final class AudioPipelineState {
             new ReaderStatus(ReaderState.STOPPED, Optional.empty())
     );
     private final AtomicLong generation = new AtomicLong();
-    private final AtomicLong latestSourceFrameNanos = new AtomicLong(NO_FRAME);
+    private final AtomicLong latestSourceArrivalNanos = new AtomicLong(NO_FRAME);
     private final AtomicLong latestOutputFrameNanos = new AtomicLong(NO_FRAME);
     private final AtomicLong bufferedMillis = new AtomicLong();
     private final AtomicLong schedulerLatenessMillis = new AtomicLong();
@@ -34,8 +34,8 @@ public final class AudioPipelineState {
         this.nanoTime = Objects.requireNonNull(nanoTime, "nanoTime");
     }
 
-    public void recordSourceFrame() {
-        setLatestSourceFrameNanos(nanoTime.getAsLong());
+    public void recordSourceArrival() {
+        setLatestSourceArrivalNanos(nanoTime.getAsLong());
     }
 
     public void recordOutputFrame() {
@@ -56,7 +56,7 @@ public final class AudioPipelineState {
 
     public void resetForExpectedEof() {
         readerStatus.set(new ReaderStatus(ReaderState.STOPPED, Optional.empty()));
-        latestSourceFrameNanos.set(NO_FRAME);
+        latestSourceArrivalNanos.set(NO_FRAME);
         latestOutputFrameNanos.set(NO_FRAME);
         schedulerLatenessMillis.set(0);
         bufferedMillis.set(0);
@@ -98,12 +98,12 @@ public final class AudioPipelineState {
         return generation.incrementAndGet();
     }
 
-    public long getLatestSourceFrameNanos() {
-        return latestSourceFrameNanos.get();
+    public long getLatestSourceArrivalNanos() {
+        return latestSourceArrivalNanos.get();
     }
 
-    public void setLatestSourceFrameNanos(long latestSourceFrameNanos) {
-        this.latestSourceFrameNanos.set(latestSourceFrameNanos);
+    public void setLatestSourceArrivalNanos(long latestSourceArrivalNanos) {
+        this.latestSourceArrivalNanos.set(latestSourceArrivalNanos);
     }
 
     public long getLatestOutputFrameNanos() {

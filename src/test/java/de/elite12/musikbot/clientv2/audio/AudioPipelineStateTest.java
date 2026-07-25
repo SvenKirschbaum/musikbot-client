@@ -1,5 +1,7 @@
 package de.elite12.musikbot.clientv2.audio;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.context.Scope;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -15,8 +17,25 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class AudioPipelineStateTest {
+
+    @Test
+    void operationMakesSpanCurrentOnlyForReturnedLexicalScope() {
+        Span span = mock(Span.class);
+        Scope scope = mock(Scope.class);
+        when(span.makeCurrent()).thenReturn(scope);
+        AudioPipelineTelemetry.Operation operation = new AudioPipelineTelemetry.Operation(span);
+
+        try (Scope ignored = operation.makeCurrent()) {
+            verify(span).makeCurrent();
+        }
+
+        verify(scope).close();
+    }
 
     @Test
     void startsNotReadyWithoutFrameTimestampsOrFailure() {
@@ -49,7 +68,7 @@ class AudioPipelineStateTest {
     @Test
     void expectedEofResetClearsEveryGenerationValueAndReadiness() {
         AudioPipelineState state = new AudioPipelineState(() -> 123);
-        state.recordSourceFrame();
+        state.recordSourceArrival();
         state.recordOutputFrame();
         state.setSchedulerLatenessMillis(40);
         state.setBufferedMillis(180);
@@ -58,7 +77,7 @@ class AudioPipelineStateTest {
 
         assertEquals(AudioPipelineState.ReaderState.STOPPED, state.getReaderState());
         assertFalse(state.isReady());
-        assertEquals(Long.MIN_VALUE, state.getLatestSourceFrameNanos());
+        assertEquals(Long.MIN_VALUE, state.getLatestSourceArrivalNanos());
         assertEquals(Long.MIN_VALUE, state.getLatestOutputFrameNanos());
         assertEquals(0, state.getLatestFrameAgeMillis());
         assertEquals(0, state.getSchedulerLatenessMillis());
@@ -70,13 +89,13 @@ class AudioPipelineStateTest {
         AtomicLong now = new AtomicLong(Duration.ofSeconds(1).toNanos());
         AudioPipelineState state = new AudioPipelineState(now::get);
 
-        state.recordSourceFrame();
+        state.recordSourceArrival();
         now.addAndGet(Duration.ofMillis(4).toNanos());
         state.recordOutputFrame();
 
         assertTrue(state.isReady());
         assertEquals(AudioPipelineState.ReaderState.READING, state.getReaderState());
-        assertEquals(Duration.ofSeconds(1).toNanos(), state.getLatestSourceFrameNanos());
+        assertEquals(Duration.ofSeconds(1).toNanos(), state.getLatestSourceArrivalNanos());
         assertEquals(Duration.ofMillis(1004).toNanos(), state.getLatestOutputFrameNanos());
     }
 
