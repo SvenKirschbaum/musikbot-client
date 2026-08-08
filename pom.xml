@@ -20,6 +20,7 @@
         <maven.compiler.source>25</maven.compiler.source>
         <jna.version>5.2.0</jna.version>
         <java.version>25</java.version>
+        <opentelemetry.version>1.64.0</opentelemetry.version>
     </properties>
 
     <repositories>
@@ -41,6 +42,11 @@
     </repositories>
 
     <dependencies>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-api</artifactId>
+            <version>${opentelemetry.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-websocket</artifactId>
