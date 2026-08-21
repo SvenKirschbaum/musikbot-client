@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.26@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
 
 #BUILD APP
-FROM maven:3.9.16-amazoncorretto-25@sha256:de7a3e517efac1b933af6ceb375974a061ba71c908ea51a18bd937716a8ade93 AS build_app
+FROM maven:3.9.16-amazoncorretto-25@sha256:d203e5601a3fe7bb2c5cdbbe4aa778aaa95ab165a72c574b5cfcdae3ea525ae9 AS build_app
 WORKDIR /usr/src/app
 RUN dnf install -y binutils && dnf clean all
 COPY pom.xml .
@@ -20,7 +20,7 @@ RUN "$JAVA_HOME/bin/jlink" \
 RUN /opt/corretto-jre/bin/java --describe-module jdk.net
 
 #BUILD SPOTIFYD
-FROM rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97 AS build_spotifyd
+FROM rust:1.98.0-bookworm@sha256:e70e2eec3d495fd5c8e0be74adda86507dfac7f51a724fbf9813ff59b2b247c7 AS build_spotifyd
 RUN apt-get update \
  && apt-get install -y --no-install-recommends libasound2-dev libssl-dev libpulse-dev libdbus-1-dev cmake libclang-dev \
  && rm -rf /var/lib/apt/lists/*
