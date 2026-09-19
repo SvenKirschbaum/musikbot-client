@@ -20,7 +20,7 @@ RUN "$JAVA_HOME/bin/jlink" \
 RUN /opt/corretto-jre/bin/java --describe-module jdk.net
 
 #BUILD SPOTIFYD
-FROM rust:1.98.1-bookworm@sha256:ae1a730a949f727611a5c684e1e26e5a9bb9885b34f65a442744ca8a61c86ca5 AS build_spotifyd
+FROM rust:1.98.1-bookworm@sha256:828077e0f5ed0401fbd9cb5b4d5dedca23bd13c7fe032f3e8b7313e7acd2a57f AS build_spotifyd
 RUN apt-get update \
  && apt-get install -y --no-install-recommends libasound2-dev libssl-dev libpulse-dev libdbus-1-dev cmake libclang-dev \
  && rm -rf /var/lib/apt/lists/*
@@ -31,7 +31,7 @@ WORKDIR /usr/src/spotifyd
 RUN cargo build --release --no-default-features --features pulseaudio_backend
 
 # PACKAGE DISCORD CLIENT
-FROM debian:13.7-slim@sha256:93b9a6764e5d7a53b6b3682cc370cbb85ace510ffe5f60b6a03821655a4b3e52
+FROM debian:13.7-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
 
 RUN \
     apt-get update \
