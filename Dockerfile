@@ -20,7 +20,7 @@ RUN "$JAVA_HOME/bin/jlink" \
 RUN /opt/corretto-jre/bin/java --describe-module jdk.net
 
 #BUILD SPOTIFYD
-FROM rust:1.98.1-bookworm@sha256:828077e0f5ed0401fbd9cb5b4d5dedca23bd13c7fe032f3e8b7313e7acd2a57f AS build_spotifyd
+FROM rust:1.98.1-bookworm@sha256:93ce27a88655056a51dbdd8f5f2d7ddc071c7b0070fb288a37b5a285fc83971e AS build_spotifyd
 RUN apt-get update \
  && apt-get install -y --no-install-recommends libasound2-dev libssl-dev libpulse-dev libdbus-1-dev cmake libclang-dev \
  && rm -rf /var/lib/apt/lists/*
