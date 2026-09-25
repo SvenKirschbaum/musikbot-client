@@ -2,6 +2,7 @@ package de.elite12.musikbot.clientv2.player;
 
 import com.google.gson.JsonArray;
 import com.neovisionaries.i18n.CountryCode;
+import de.elite12.musikbot.clientv2.audio.PlaybackExpectation;
 import de.elite12.musikbot.clientv2.core.Clientv2ServiceProperties;
 import de.elite12.musikbot.clientv2.events.SongFinishedEvent;
 import de.elite12.musikbot.shared.SongTypes;
@@ -52,6 +53,9 @@ public class SpotifyPlayer implements Player, HealthIndicator {
 
     @Autowired
     private TaskScheduler taskScheduler;
+
+    @Autowired
+    private PlaybackExpectation playbackExpectation;
 
     private String deviceId = "";
 
@@ -141,9 +145,11 @@ public class SpotifyPlayer implements Player, HealthIndicator {
             logger.debug(String.format("End Time: %s", this.endtime.toString()));
             this.startTimer();
             this.paused = false;
+            this.playbackExpectation.playing();
         } catch (IOException | SpotifyWebApiException | ParseException e) {
             logger.error("Error starting spotify playback", e);
             this.cancelTimer();
+            this.playbackExpectation.notPlaying();
             this.applicationEventPublisher.publishEvent(new SongFinishedEvent(this));
         }
     }
@@ -151,6 +157,7 @@ public class SpotifyPlayer implements Player, HealthIndicator {
     @Override
     public void stop() {
         logger.info("Stop");
+        this.playbackExpectation.notPlaying();
         this.paused = false;
         try {
             if(this.timer != null) {
@@ -170,11 +177,13 @@ public class SpotifyPlayer implements Player, HealthIndicator {
                 this.spotifyApi.pauseUsersPlayback().build().execute();
                 this.cancelTimer();
                 this.remaining = Duration.between(Instant.now(),this.endtime);
+                this.playbackExpectation.notPlaying();
             }
             else {
                 this.spotifyApi.startResumeUsersPlayback().device_id(this.deviceId).build().execute();
                 this.endtime=Instant.now().plus(this.remaining);
                 this.startTimer();
+                this.playbackExpectation.playing();
             }
             this.paused=!this.paused;
         } catch (IOException | SpotifyWebApiException | ParseException e) {
@@ -195,6 +204,7 @@ public class SpotifyPlayer implements Player, HealthIndicator {
 
     private void finished() {
         logger.info("Playback finished");
+        this.playbackExpectation.notPlaying();
         this.applicationEventPublisher.publishEvent(new SongFinishedEvent(this));
     }
 

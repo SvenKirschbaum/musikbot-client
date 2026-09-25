@@ -5,17 +5,19 @@ import de.elite12.musikbot.clientv2.events.NoListenerEvent;
 import de.elite12.musikbot.clientv2.events.SongFinishedEvent;
 import de.elite12.musikbot.clientv2.events.StartSongEvent;
 import de.elite12.musikbot.clientv2.events.StopSongEvent;
-import de.elite12.musikbot.clientv2.util.AudioSource;
+import de.elite12.musikbot.clientv2.audio.SpotifyAudioPipeline;
 import club.minnced.discord.jdave.interop.JDaveSessionFactory;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.audio.AudioModuleConfig;
 import net.dv8tion.jda.api.audio.AudioSendHandler;
+import net.dv8tion.jda.api.audio.hooks.ConnectionStatus;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.GuildVoiceState;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.channel.unions.AudioChannelUnion;
+import net.dv8tion.jda.api.events.guild.GuildLeaveEvent;
 import net.dv8tion.jda.api.events.guild.voice.GuildVoiceUpdateEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.exceptions.InsufficientPermissionException;
@@ -25,15 +27,12 @@ import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.managers.AudioManager;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import org.jetbrains.annotations.NotNull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
-import javax.sound.sampled.LineUnavailableException;
 import java.util.EnumSet;
 import java.util.Objects;
 
@@ -50,10 +49,16 @@ public class DiscordService extends ListenerAdapter {
     @Autowired
     private ApplicationEventPublisher applicationEventPublisher;
 
-    private final Logger logger = LoggerFactory.getLogger(DiscordService.class);
     private final JDA JDA;
+    private final SpotifyAudioPipeline pipeline;
+    private final DiscordAudioConnectionLifecycleRegistry<AudioManager> audioLifecycles;
 
-    public DiscordService(Clientv2ServiceProperties properties) throws InterruptedException {
+    public DiscordService(Clientv2ServiceProperties properties, SpotifyAudioPipeline pipeline) throws InterruptedException {
+        this.pipeline = pipeline;
+        this.audioLifecycles = new DiscordAudioConnectionLifecycleRegistry<>(
+                this::createLifecycle,
+                this::detachLifecycle
+        );
         JDABuilder builder = JDABuilder.create(properties.getDiscordToken(), EnumSet.of(GUILD_VOICE_STATES));
         builder.setAudioModuleConfig(new AudioModuleConfig().withDaveSessionFactory(new JDaveSessionFactory()));
 
@@ -91,27 +96,19 @@ public class DiscordService extends ListenerAdapter {
         //Check if last member in channel
         if (currentChannel != null && (Objects.equals(event.getChannelJoined(), currentChannel) || Objects.equals(event.getChannelLeft(), currentChannel))) {
             if (currentChannel.getMembers().size() <= 1) {
-                this.disconnectVoice(event.getGuild().getAudioManager());
+                lifecycleFor(event.getGuild().getAudioManager()).disconnect();
             }
         }
 
         //Check if bot has been disconnected
         if (event.getMember().getIdLong() == this.JDA.getSelfUser().getIdLong() && event.getNewValue() == null) {
-            this.disconnectVoice(event.getGuild().getAudioManager());
+            lifecycleFor(event.getGuild().getAudioManager()).disconnected();
         }
     }
 
-    private void disconnectVoice(AudioManager audioManager) {
-        audioManager.closeAudioConnection();
-
-        AudioSendHandler sendingHandler = audioManager.getSendingHandler();
-
-        if (sendingHandler instanceof AudioSource) {
-            ((AudioSource) sendingHandler).destroy();
-            audioManager.setSendingHandler(null);
-        }
-
-        this.checkNoListeners();
+    @Override
+    public void onGuildLeave(@NotNull GuildLeaveEvent event) {
+        audioLifecycles.remove(event.getGuild().getIdLong());
     }
 
     private void onLeaveCommand(@NotNull SlashCommandInteractionEvent event) {
@@ -130,13 +127,13 @@ public class DiscordService extends ListenerAdapter {
 
         Guild guild = Objects.requireNonNull(event.getGuild());
         AudioManager audioManager = guild.getAudioManager();
+        boolean connected = audioManager.isConnected();
+        lifecycleFor(audioManager).disconnect();
 
-        if (!audioManager.isConnected()) {
+        if (!connected) {
             interactionHook.editOriginal("I am not currently in a voice channel!").queue();
             return;
         }
-
-        disconnectVoice(audioManager);
 
         interactionHook.editOriginal("Will do!").queue();
     }
@@ -169,22 +166,74 @@ public class DiscordService extends ListenerAdapter {
         audioManager.setAutoReconnect(false);
         AudioChannelUnion channel = voiceState.getChannel();
 
-        if (audioManager.getSendingHandler() == null) {
-            try {
-                audioManager.setSendingHandler(new AudioSource());
-            } catch (LineUnavailableException e) {
-                this.logger.error("Unable to create AudioSource", e);
-                interactionHook.editOriginal("An internal Error occured").queue();
-                return;
-            }
+        DiscordAudioConnectionLifecycle lifecycle = lifecycleFor(audioManager);
+        DiscordAudioConnectionLifecycle.JoinAttempt attempt = lifecycle.beginJoin();
+        if (attempt == null) {
+            interactionHook.editOriginal("I am already connected or connecting to a voice channel!").queue();
+            return;
         }
 
+        boolean opened;
         try {
-            audioManager.openAudioConnection(channel);
-            interactionHook.editOriginal("Will do!").queue();
+            opened = lifecycle.open(attempt, () -> audioManager.openAudioConnection(channel));
         } catch (InsufficientPermissionException insufficientPermissionException) {
             interactionHook.editOriginal("I dont have permissions to join your channel!").queue();
+            return;
+        } catch (RuntimeException failure) {
+            throw failure;
         }
+
+        if (!opened) {
+            interactionHook.editOriginal("I am already connected or connecting to a voice channel!").queue();
+            return;
+        }
+
+        interactionHook.editOriginal("Will do!").queue();
+    }
+
+    private DiscordAudioConnectionLifecycle lifecycleFor(AudioManager audioManager) {
+        return audioLifecycles.lifecycleFor(audioManager.getGuild().getIdLong(), audioManager);
+    }
+
+    private DiscordAudioConnectionLifecycle createLifecycle(AudioManager audioManager) {
+        DiscordAudioConnectionLifecycle lifecycle = new DiscordAudioConnectionLifecycle(
+                pipeline.broadcaster(),
+                new DiscordAudioConnectionLifecycle.Connection() {
+                    @Override
+                    public ConnectionStatus status() {
+                        return audioManager.getConnectionStatus();
+                    }
+
+                    @Override
+                    public AudioSendHandler sendingHandler() {
+                        return audioManager.getSendingHandler();
+                    }
+
+                    @Override
+                    public void setSendingHandler(AudioSendHandler handler) {
+                        audioManager.setSendingHandler(handler);
+                    }
+
+                    @Override
+                    public void close() {
+                        audioManager.closeAudioConnection();
+                    }
+                },
+                this::checkNoListeners
+        );
+        audioManager.setConnectionListener(lifecycle);
+        return lifecycle;
+    }
+
+    private void detachLifecycle(
+            AudioManager audioManager,
+            DiscordAudioConnectionLifecycle lifecycle,
+            boolean completeDisconnect
+    ) {
+        if (audioManager.getConnectionListener() == lifecycle) {
+            audioManager.setConnectionListener(null);
+        }
+        lifecycle.detach(completeDisconnect);
     }
 
     private void checkNoListeners() {
