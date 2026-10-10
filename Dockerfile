@@ -22,13 +22,13 @@ RUN /opt/corretto-jre/bin/java --describe-module jdk.net
 #BUILD SPOTIFYD
 FROM rust:1.99.0-bookworm@sha256:114c7a4425406451c2866b6aafe69fe29b1b298832db1277d411ac73c82d04d6 AS build_spotifyd
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libasound2-dev libssl-dev libpulse-dev libdbus-1-dev cmake libclang-dev \
+ && apt-get install -y --no-install-recommends libssl-dev libdbus-1-dev cmake libclang-dev \
  && rm -rf /var/lib/apt/lists/*
 RUN git clone https://github.com/Spotifyd/spotifyd.git /usr/src/spotifyd && \
     git -C /usr/src/spotifyd fetch origin refs/pull/1374/head:tmp && \
     git -C /usr/src/spotifyd checkout tmp
 WORKDIR /usr/src/spotifyd
-RUN cargo build --release --no-default-features --features pulseaudio_backend
+RUN cargo build --release --no-default-features
 
 # PACKAGE DISCORD CLIENT
 FROM debian:13.7-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
@@ -37,13 +37,12 @@ RUN \
     apt-get update \
  && apt-get install -y --no-install-recommends \
     ca-certificates \
-    libasound2 \
     libdbus-1-3 \
-    pulseaudio \
     supervisor \
  && rm -rf /var/lib/apt/lists/*
 
 COPY ./docker-fs/etc /etc
+COPY ./docker-fs/usr/local/bin /usr/local/bin
 
 ENV JAVA_HOME=/opt/corretto
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
