@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.29@sha256:572cebbc2b15e6f84c077742952674889cb63cd5e9b80abdffcbe587b6f19183
 
 #BUILD APP
-FROM maven:3.10.0-amazoncorretto-25@sha256:cd70d2558213140e9352b3ef0badc40a09140e7e48f72e78a3760da5fe614665 AS build_app
+FROM maven:3.10.0-amazoncorretto-25@sha256:0885bf881b6a2e62624e3c421978feca9ffde9c5b7340537ce78e2f22cc7b34a AS build_app
 WORKDIR /usr/src/app
 RUN dnf install -y binutils && dnf clean all
 COPY pom.xml .
